@@ -342,6 +342,7 @@ function burst(x, z, color, n = 10, y = 1) {
 
 // ---------- networking ----------
 let ws = null;
+let kicked = false;
 let myId = null;
 let state = null;
 let shopInfo = null;
@@ -358,22 +359,60 @@ if (params.get('error')) showJoinError(params.get('error'));
 if (isApp) for (const id of ['quit', 'quit2']) $(id).classList.remove('hidden');
 $('quit').onclick = $('quit2').onclick = () => window.cakeApp?.quit();
 
-// anti-cheat: if it's on and didn't load, block the game with an error screen
-let antiCheatBlocked = false;
+// full-screen error that stops the game (anti-cheat failures, bans)
+let blocked = false;
+function showBlocker({ title, message, code = '', detail = '', action, onAction }) {
+  blocked = true;
+  ws?.close();
+  for (const id of ['join', 'pause']) $(id).classList.add('hidden');
+  $('banner').innerHTML = '';
+  $('blocktitle').textContent = title;
+  $('blockmessage').textContent = message;
+  $('blockcode').textContent = code;
+  $('blockcode').classList.toggle('hidden', !code);
+  $('blockdetail').textContent = detail;
+  $('blockaction').textContent = action;
+  $('blockaction').onclick = onAction;
+  $('blockquit').classList.toggle('hidden', !isApp);
+  $('blocker').classList.remove('hidden');
+}
+$('blockquit').onclick = () => window.cakeApp?.quit();
+
+// anti-cheat: if it's on and didn't load, block the game
 if (window.cakeApp?.antiCheatStatus) {
   window.cakeApp.antiCheatStatus().then(ac => {
     if (!ac.enabled || ac.ok) return;
-    antiCheatBlocked = true;
-    ws?.close();
-    $('join').classList.add('hidden');
-    $('eacmessage').textContent = ac.message;
-    $('eaccode').textContent = `Error: ${ac.code}`;
-    $('eacdetail').textContent = ac.detail;
-    $('eacerror').classList.remove('hidden');
+    showBlocker({
+      title: '🛡️ Anti-cheat error', message: ac.message, code: `Error: ${ac.code}`, detail: ac.detail,
+      action: 'Retry', onAction: () => window.cakeApp.relaunch(),
+    });
   });
 }
-$('eacretry').onclick = () => window.cakeApp?.relaunch();
-$('eacquit').onclick = () => window.cakeApp?.quit();
+
+function showBanned(msg) {
+  let code = 'Permanent ban';
+  if (msg.until) {
+    const mins = Math.max(1, Math.ceil((msg.until - Date.now()) / 60000));
+    const d = Math.floor(mins / 1440), h = Math.floor((mins % 1440) / 60), m = mins % 60;
+    code = 'Ends in ' + [d && `${d}d`, h && `${h}h`, m && `${m}m`].filter(Boolean).join(' ');
+  }
+  showBlocker({
+    title: "🚫 You're banned", message: `Reason: ${msg.reason}`, code,
+    detail: "The host of this game banned you. You can still host your own games or join other people's.",
+    action: 'Back to menu', onAction: () => { blocked = false; $('blocker').classList.add('hidden'); goHome(); },
+  });
+}
+
+// a stable ID for this player so bans stick (the app keeps it in its user data)
+async function getPlayerId() {
+  if (window.cakeApp?.playerId) return window.cakeApp.playerId();
+  let id = localStorageGet('cd-player-id');
+  if (!id) {
+    id = Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    localStorageSet('cd-player-id', id);
+  }
+  return id;
+}
 
 function showJoinError(text) {
   $('joinerror').textContent = text;
@@ -402,7 +441,7 @@ $('play').onclick = join;
 for (const id of ['name', 'room']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
 
 async function join() {
-  if (antiCheatBlocked) return;
+  if (blocked) return;
   const name = $('name').value.trim() || 'Baker' + Math.floor(Math.random() * 1000);
   const room = $('room').value.trim() || 'lobby';
   localStorageSet('cd-name', name);
@@ -427,11 +466,15 @@ async function join() {
   }
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}`);
-  ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name, room }));
+  const playerId = await getPlayerId();
+  ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name, room, playerId }));
   ws.onmessage = e => onMessage(JSON.parse(e.data));
   ws.onclose = () => {
-    $('banner').innerHTML = 'Disconnected 😢<br><small>Press Esc for the menu</small>';
     ws = null;
+    if (blocked) return;
+    $('banner').innerHTML = kicked ? 'You were kicked by the host 👢<br><small>Press Esc for the menu</small>'
+      : 'Disconnected 😢<br><small>Press Esc for the menu</small>';
+    if (!myId) { $('join').classList.remove('hidden'); $('banner').innerHTML = ''; showJoinError("Couldn't connect to the game."); }
   };
   $('join').classList.add('hidden');
 }
@@ -445,6 +488,10 @@ function onMessage(msg) {
     history.replaceState(null, '', `?room=${encodeURIComponent(msg.room)}`);
     $('roomname').textContent = `🏠 ${msg.room}`;
     for (const id of ['hud', 'cakebar', 'scores', 'chat', 'help']) $(id).classList.remove('hidden');
+  } else if (msg.t === 'banned') {
+    showBanned(msg);
+  } else if (msg.t === 'kicked') {
+    kicked = true;
   } else if (msg.t === 'state') {
     applyState(msg);
   } else if (msg.t === 'chat') {

@@ -24,14 +24,14 @@
     #joinerror { background: #ff5e5e; padding: 8px; border-radius: 10px; margin-top: 6px; font-size: 14px; }
     button.secondary { background: #fff6 !important; color: #fff !important; box-shadow: none !important; font-size: 16px !important; padding: 10px !important; }
 
-    #eacerror { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, #5a1a3a, #1b1430 75%); z-index: 20; text-align: center; padding: 16px; }
-    #eacerror .card { background: #0006; padding: 32px; border-radius: 24px; width: min(92vw, 440px); border: 2px solid #ff5e5e; }
-    #eacerror h1 { margin: 0 0 8px; font-size: 30px; }
-    #eacerror p { margin: 8px 0; line-height: 1.5; }
-    #eacerror code { display: inline-block; background: #ff5e5e33; color: #ffb3b3; padding: 4px 10px; border-radius: 8px; margin: 8px 0 4px; font-size: 14px; }
-    #eacerror .detail { font-size: 12px; opacity: .6; word-break: break-word; }
-    #eacerror .buttons { display: flex; gap: 10px; margin-top: 18px; }
-    #eacerror button { flex: 1; padding: 14px; font-size: 18px; font-weight: bold; border: none; border-radius: 14px; background: #ffd23f; color: #6b3fa0; cursor: pointer; }
+    #blocker { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, #5a1a3a, #1b1430 75%); z-index: 20; text-align: center; padding: 16px; }
+    #blocker .card { background: #0006; padding: 32px; border-radius: 24px; width: min(92vw, 440px); border: 2px solid #ff5e5e; }
+    #blocker h1 { margin: 0 0 8px; font-size: 30px; }
+    #blocker p { margin: 8px 0; line-height: 1.5; }
+    #blocker code { display: inline-block; background: #ff5e5e33; color: #ffb3b3; padding: 4px 10px; border-radius: 8px; margin: 8px 0 4px; font-size: 14px; }
+    #blocker .detail { font-size: 12px; opacity: .6; word-break: break-word; }
+    #blocker .buttons { display: flex; gap: 10px; margin-top: 18px; }
+    #blocker button { flex: 1; padding: 14px; font-size: 18px; font-weight: bold; border: none; border-radius: 14px; background: #ffd23f; color: #6b3fa0; cursor: pointer; }
 
     #pause { position: fixed; inset: 0; display: grid; place-items: center; background: #0008; z-index: 5; }
     #pause .card { display: flex; flex-direction: column; gap: 10px; width: min(90vw, 300px); }
@@ -84,15 +84,15 @@
     </div>
   </div>
 
-  <div id="eacerror" class="hidden">
+  <div id="blocker" class="hidden">
     <div class="card">
-      <h1>🛡️ Anti-cheat error</h1>
-      <p id="eacmessage"></p>
-      <code id="eaccode"></code>
-      <p class="detail" id="eacdetail"></p>
+      <h1 id="blocktitle"></h1>
+      <p id="blockmessage"></p>
+      <code id="blockcode"></code>
+      <p class="detail" id="blockdetail"></p>
       <div class="buttons">
-        <button id="eacretry">Retry</button>
-        <button id="eacquit" class="secondary">Quit</button>
+        <button id="blockaction"></button>
+        <button id="blockquit" class="secondary">Quit</button>
       </div>
     </div>
   </div>

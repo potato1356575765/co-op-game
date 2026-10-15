@@ -61,6 +61,19 @@ Touch: drag on the left half of the screen to move, and touch the right half to 
 
 Each wave gets bigger and scales with how many players are in the room.
 
+## Hosting: kick & ban
+
+The host types these in chat (**Enter**). Only the computer running the game can use them.
+
+| Command | What it does |
+| --- | --- |
+| `/kick Name` | Boot someone from the game |
+| `/ban Name [30m\|2h\|7d] [reason]` | Ban someone (permanent if you leave out a time) |
+| `/unban Name` | Lift a ban |
+| `/bans` | List current bans |
+
+Banned players get a ban screen with the reason and how long is left. Bans are saved on the host's computer and match both the player's app ID and their IP. Every player's app is its own server, so a ban only applies to games *you* host. Bans across every game would need a central server or Epic's Sanctions service.
+
 ## Co-op stuff
 
 - **Shared wallet:** every squished bug adds coins to one team pot, and anyone can spend it in the shop between waves. Buy Sprinkle Power (damage), Rapid Fire, Zoomies (move speed), or Frosting Patch (+25 cake HP).

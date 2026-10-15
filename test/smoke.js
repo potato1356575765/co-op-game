@@ -1,21 +1,29 @@
 // Spins up the server, connects two players to the same room and checks the basics.
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const BANS_FILE = path.join(os.tmpdir(), `cake-bans-${process.pid}.json`);
+process.env.CAKE_BANS_FILE = BANS_FILE;
 const assert = require('assert');
 const http = require('http');
 const WebSocket = require('ws');
-const { server, rooms, start } = require('../server');
+const { server, rooms, start, lanAddresses, ban } = require('../server');
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
-function connect(port, name, room) {
-  const ws = new WebSocket(`ws://localhost:${port}`);
-  const client = { ws, states: [], chats: [], welcome: null };
+function connect(port, name, room, { host = 'localhost', playerId = `${name}-test-id` } = {}) {
+  const ws = new WebSocket(`ws://${host}:${port}`);
+  const client = { ws, states: [], chats: [], welcome: null, banned: null, kicked: false, closeCode: null };
+  ws.on('close', code => { client.closeCode = code; });
   ws.on('message', raw => {
     const msg = JSON.parse(raw);
     if (msg.t === 'welcome') client.welcome = msg;
     if (msg.t === 'state') client.states.push(msg);
     if (msg.t === 'chat') client.chats.push(msg);
+    if (msg.t === 'banned') client.banned = msg;
+    if (msg.t === 'kicked') client.kicked = true;
   });
-  return new Promise(res => ws.on('open', () => { ws.send(JSON.stringify({ t: 'join', name, room })); res(client); }));
+  return new Promise(res => ws.on('open', () => { ws.send(JSON.stringify({ t: 'join', name, room, playerId })); res(client); }));
 }
 
 const get = (port, p) => new Promise(res => http.get(`http://localhost:${port}${p}`, r => { r.resume(); res(r.statusCode); }));
@@ -101,11 +109,65 @@ const get = (port, p) => new Promise(res => http.get(`http://localhost:${port}${
   for (let i = 0; i < 500; i++) flooder.ws.send(JSON.stringify({ t: 'input' }));
   assert.strictEqual(await closed, 1008, 'flooder kicked');
 
+  // bans: only the host (connected from this computer) can use commands
+  const lan = lanAddresses()[0];
+  if (lan) {
+    await wait(800);
+    const d = await connect(port, 'Dave', 'test-room', { host: lan, playerId: 'dave-id-1234' });
+    await wait(200);
+    assert.ok(d.welcome, 'Dave joined over the network');
+    d.ws.send(JSON.stringify({ t: 'chat', text: '/ban Alice' }));
+    await wait(150);
+    assert.ok(d.chats.some(m => m.text === 'Only the host can use commands.'), 'non-host cannot use commands');
+
+    a.ws.send(JSON.stringify({ t: 'chat', text: '/ban Dave 1h being mean' }));
+    await wait(200);
+    assert.strictEqual(d.banned?.reason, 'being mean', 'Dave sees ban reason');
+    assert.ok(d.banned.until > Date.now() + 59 * 60e3, 'ban lasts an hour');
+    assert.strictEqual(d.closeCode, 4003, 'Dave disconnected');
+    assert.ok(JSON.parse(fs.readFileSync(BANS_FILE, 'utf8')).some(b => b.name === 'Dave'), 'ban saved to disk');
+
+    const d2 = await connect(port, 'Dave2', 'test-room', { host: lan, playerId: 'new-id-5678' });
+    await wait(200);
+    assert.ok(d2.banned && !d2.welcome, 'IP ban stops a new ID from the same computer');
+
+    await wait(800);
+    a.ws.send(JSON.stringify({ t: 'chat', text: '/unban Dave' }));
+    await wait(150);
+    const d3 = await connect(port, 'Dave', 'test-room', { host: lan, playerId: 'dave-id-1234' });
+    await wait(200);
+    assert.ok(d3.welcome && !d3.banned, 'unban lets Dave back in');
+    d3.ws.close();
+  } else {
+    console.log('(no LAN address, skipping network ban tests)');
+  }
+
+  // can't ban yourself, and bans expire
+  await wait(800);
+  a.ws.send(JSON.stringify({ t: 'chat', text: '/ban Alice' }));
+  await wait(150);
+  assert.ok(a.chats.some(m => m.text.includes("can't ban yourself")), 'host cannot ban themselves');
+  const e = await connect(port, 'Eve', 'test-room');
+  await wait(150);
+  ban(rooms.get('test-room').players.get(e.welcome.id), 'test', 1);
+  await wait(50);
+  const e2 = await connect(port, 'Eve', 'test-room');
+  await wait(150);
+  assert.ok(e2.welcome && !e2.banned, 'expired ban lets player back in');
+  e2.ws.close();
+
+  // kick
+  await wait(800);
+  a.ws.send(JSON.stringify({ t: 'chat', text: '/kick Bob' }));
+  await wait(200);
+  assert.ok(b.kicked && b.closeCode === 4001, 'Bob was kicked');
+
   // leaving cleans up empty rooms
   c.ws.close();
   await wait(200);
   assert.ok(!rooms.has('other'), 'empty room deleted');
 
+  fs.rmSync(BANS_FILE, { force: true });
   console.log('✅ all smoke tests passed');
   a.ws.close(); b.ws.close();
   process.exit(0);

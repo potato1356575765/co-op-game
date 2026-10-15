@@ -373,6 +373,98 @@ const server = http.createServer((req, res) => {
 });
 
 // --- websockets ---
+// --- bans ---
+// Bans live on the host's computer (every player's app is its own server), keyed by the player's
+// app ID and IP. CAKE_BANS_FILE sets where they're saved; the desktop app points it at its user data.
+const BANS_FILE = process.env.CAKE_BANS_FILE || path.join(__dirname, 'bans.json');
+let bans = loadBans();
+
+function loadBans() {
+  try { return JSON.parse(fs.readFileSync(BANS_FILE, 'utf8')); } catch { return []; }
+}
+
+function saveBans() {
+  try { fs.writeFileSync(BANS_FILE, JSON.stringify(bans, null, 2)); } catch (err) { console.error('Could not save bans:', err.message); }
+}
+
+function findBan(playerId, ip) {
+  const now = Date.now();
+  const before = bans.length;
+  bans = bans.filter(b => !b.until || b.until > now);
+  if (bans.length !== before) saveBans();
+  return bans.find(b => b.playerId === playerId || (ip && b.ip === ip)) || null;
+}
+
+// Also the hook for Easy Anti-Cheat: call ban(player, 'Easy Anti-Cheat violation') when it flags someone.
+function ban(p, reason, durationMs) {
+  const entry = {
+    playerId: p.playerId, ip: p.ip, name: p.name,
+    reason: reason || 'No reason given', at: Date.now(),
+    until: durationMs ? Date.now() + durationMs : null,
+  };
+  bans = bans.filter(b => b.playerId !== p.playerId);
+  bans.push(entry);
+  saveBans();
+  for (const room of rooms.values()) {
+    for (const other of room.players.values()) {
+      if (other.playerId === p.playerId || (p.ip && other.ip === p.ip)) sendBanned(other.ws, entry);
+    }
+  }
+  return entry;
+}
+
+function sendBanned(ws, entry) {
+  if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'banned', reason: entry.reason, until: entry.until }));
+  ws.close(4003, 'Banned');
+}
+
+const DURATION = { m: 60e3, h: 3600e3, d: 86400e3 };
+function parseDuration(text) {
+  const m = /^(\d+)([mhd])$/i.exec(text || '');
+  return m ? Number(m[1]) * DURATION[m[2].toLowerCase()] : null;
+}
+
+const isLoopback = ip => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip);
+
+// Host-only chat commands. Returns the reply to show the host.
+function runCommand(room, host, text) {
+  const [cmd, target, ...rest] = text.slice(1).split(/\s+/);
+  const findPlayer = () => [...room.players.values()].find(p => p.name.toLowerCase() === (target || '').toLowerCase());
+  switch ((cmd || '').toLowerCase()) {
+    case 'kick': {
+      const p = findPlayer();
+      if (!p) return `No player named "${target}" here.`;
+      if (p === host) return "You can't kick yourself 😅";
+      if (p.ws.readyState === 1) p.ws.send(JSON.stringify({ t: 'kicked' }));
+      p.ws.close(4001, 'Kicked');
+      room.say(`${p.name} was kicked.`);
+      return null;
+    }
+    case 'ban': {
+      const p = findPlayer();
+      if (!p) return `No player named "${target}" here.`;
+      if (p === host) return "You can't ban yourself 😅";
+      const duration = parseDuration(rest[0]);
+      const reason = rest.slice(duration ? 1 : 0).join(' ');
+      ban(p, reason, duration);
+      room.say(`🔨 ${p.name} was banned${duration ? ` for ${rest[0]}` : ''}.`);
+      return null;
+    }
+    case 'unban': {
+      const before = bans.length;
+      bans = bans.filter(b => b.name.toLowerCase() !== (target || '').toLowerCase());
+      if (bans.length === before) return `No ban for "${target}".`;
+      saveBans();
+      return `Unbanned ${target}.`;
+    }
+    case 'bans':
+      findBan(null, null); // drop expired ones
+      return bans.length ? 'Bans: ' + bans.map(b => `${b.name} (${b.until ? 'until ' + new Date(b.until).toLocaleString() : 'permanent'})`).join(', ') : 'Nobody is banned.';
+    default:
+      return 'Commands: /kick Name · /ban Name [30m|2h|7d] [reason] · /unban Name · /bans';
+  }
+}
+
 // Anti-cheat: the server owns all game state (movement speed, fire rate, damage, coins, shop),
 // so clients can only send inputs. On top of that we cap message size and rate, and kick floods.
 const MAX_MSGS_PER_SEC = 60;
@@ -381,7 +473,8 @@ const CHAT_COOLDOWN = 0.75;
 
 const wss = new WebSocketServer({ server, maxPayload: 4096 });
 
-wss.on('connection', ws => {
+wss.on('connection', (ws, req) => {
+  const ip = req.socket.remoteAddress;
   let room = null;
   let player = null;
 
@@ -402,8 +495,13 @@ wss.on('connection', ws => {
     if (!msg || typeof msg !== 'object') return;
 
     if (msg.t === 'join' && !player) {
+      const playerId = /^[a-zA-Z0-9-]{8,64}$/.test(msg.playerId) ? msg.playerId : `anon-${Math.random().toString(36).slice(2)}`;
+      const existing = findBan(playerId, isLoopback(ip) ? null : ip);
+      if (existing) return sendBanned(ws, existing);
       room = getRoom(msg.room);
       player = room.addPlayer(ws, msg.name);
+      player.playerId = playerId;
+      player.ip = isLoopback(ip) ? null : ip; // never IP-ban the host's own computer
       ws.send(JSON.stringify({ t: 'welcome', id: player.id, room: room.id, w: W, h: H, cake: CAKE, shop: SHOP }));
       room.say(`${player.name} joined the bakery 🧑‍🍳`);
       return;
@@ -421,6 +519,11 @@ wss.on('connection', ws => {
       if (now - lastChat < CHAT_COOLDOWN * 1000) return;
       lastChat = now;
       const text = String(msg.text || '').trim().slice(0, 140);
+      if (text.startsWith('/')) {
+        const reply = isLoopback(ip) ? runCommand(room, player, text) : 'Only the host can use commands.';
+        if (reply && ws.readyState === 1) ws.send(JSON.stringify({ t: 'chat', name: '🛡️', text: reply }));
+        return;
+      }
       if (text) room.broadcast({ t: 'chat', name: player.name, color: player.color, text });
     }
   });
@@ -457,4 +560,4 @@ if (require.main === module) {
   start().then(port => console.log(`🍰 Cake Defense running at http://localhost:${port}`));
 }
 
-module.exports = { server, rooms, start, lanAddresses };
+module.exports = { server, rooms, start, lanAddresses, ban };

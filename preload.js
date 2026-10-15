@@ -7,4 +7,5 @@ contextBridge.exposeInMainWorld('cakeApp', {
   quit: () => ipcRenderer.send('quit'),
   relaunch: () => ipcRenderer.send('relaunch'),
   antiCheatStatus: () => ipcRenderer.invoke('anti-cheat-status'),
+  playerId: () => ipcRenderer.invoke('player-id'),
 });

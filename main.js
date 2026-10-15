@@ -2,8 +2,13 @@
 // Runs the game server inside the app and shows the game in its own window.
 // Friends on the same network can join by typing this computer's address in their app.
 
+const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron');
+
+// bans this computer hands out (as a host) are saved next to the app's other data
+process.env.CAKE_BANS_FILE ??= path.join(app.getPath('userData'), 'bans.json');
 const { start } = require('./server');
 const { initAntiCheat } = require('./anticheat');
 
@@ -71,6 +76,14 @@ ipcMain.on('home', () => win?.loadURL(homeUrl));
 ipcMain.on('fullscreen', () => win?.setFullScreen(!win.isFullScreen()));
 ipcMain.on('quit', () => app.quit());
 ipcMain.handle('anti-cheat-status', () => antiCheat);
+ipcMain.handle('player-id', () => {
+  const file = path.join(app.getPath('userData'), 'player-id');
+  try { return fs.readFileSync(file, 'utf8').trim(); } catch {}
+  const id = crypto.randomUUID();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, id);
+  return id;
+});
 ipcMain.on('relaunch', () => { app.relaunch(); app.exit(0); });
 
 app.on('second-instance', () => {
