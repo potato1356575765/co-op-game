@@ -1,8 +1,6 @@
-# 🌲 Wildlands
+# 🍰 Cake Defense 3D
 
-An endless, procedurally generated open world you explore **together** with friends, right in the browser.
-
-Chop trees, mine rocks, loot treasure chests, build campfires to survive the night, and team up to awaken and slay the **Ancient Guardians** sleeping in shrines across the land.
+An online co-op 3D browser game. A giant birthday cake sits in the middle of a picnic blanket, and it's swarmed by bugs that want to eat it. You and your friends are tiny chef-hat bakers armed with sprinkle blasters. **Protect the cake.**
 
 ## Play
 
@@ -11,46 +9,51 @@ npm install
 npm start
 ```
 
-Open http://localhost:3000, pick a name, and hit **Play**.
+Open http://localhost:3000, pick a name and a **room code**, then hit **Play**. Anyone who enters the same room code joins your game, and you can also just share the URL (`?room=yourcode`).
 
-### Playing with friends
+### Playing with friends online
 
-Everyone connected to the same server shares the same world.
-
-- **Same Wi‑Fi / LAN:** friends open `http://<your-local-ip>:3000` (find your IP with `ipconfig` / `ifconfig`).
-- **Over the internet:** deploy to any Node host that supports WebSockets (Render, Railway, Fly.io, a VPS…), or tunnel your local server with something like `ngrok http 3000`.
+- **Same Wi‑Fi:** friends open `http://<your-local-ip>:3000`.
+- **Over the internet:** deploy to any Node host with WebSocket support (Render, Railway, Fly.io, a VPS…), or tunnel with `ngrok http 3000`.
 
 ## Controls
 
-| Key | Action |
+| Input | Action |
 | --- | --- |
 | **WASD** / arrows | Move |
-| **Mouse** + **click** (hold) | Aim + sword attack |
-| **E** | Chop tree · mine rock · eat berries · open chest · awaken shrine |
-| **Hold E** next to a downed friend | Revive them |
-| **1** / **2** | Build mode: campfire (5 🪵) / wall (2 🪨) — click to place |
-| **Esc** / right click | Cancel build mode |
-| **X** | Demolish the structure under your cursor (partial refund) |
-| **U** | Upgrade sword (costs gold, up to level 10) |
+| **Mouse** + **click** (hold) | Aim + shoot sprinkles |
+| **1–4** | Buy upgrades (between waves) |
 | **Enter** | Chat |
-| **H** | Toggle help |
+| Stand next to a downed friend | Revive them 💖 |
 
-Touch: drag on the left half of the screen to move, tap the right half to attack.
+Touch: drag on the left half of the screen to move, and touch the right half to aim and shoot.
+
+## The bugs
+
+| Bug | Deal |
+| --- | --- |
+| 🐜 Ant | Marches straight for the cake. There are lots of them. |
+| 🐝 Wasp | Ignores the cake and hunts **you**. Shows up from wave 2. |
+| 🪲 Beetle | Slow, tanky, and takes big bites. Shows up from wave 3. |
+| 👑 Queen | Boss ant every 5th wave. Bring friends. |
+
+Each wave gets bigger and scales with how many players are in the room.
+
+## Co-op stuff
+
+- **Shared wallet:** every squished bug adds coins to one team pot, and anyone can spend it in the shop between waves. Buy Sprinkle Power (damage), Rapid Fire, Zoomies (move speed), or Frosting Patch (+25 cake HP).
+- **Downed, not dead:** at 0 HP you fall over. A teammate who stands next to you for 2 seconds revives you; otherwise you respawn after 15s (5s if you're solo).
+- **The cake gets eaten tier by tier**, so you can see how much trouble you're in. If it hits 0, it's game over and the room restarts.
 
 ## How it works
 
-- **Infinite world:** terrain (ocean, beaches, meadows, forests, hills, mountains, snowy peaks) is generated from layered value noise using a shared seed. `shared/world.js` runs on both server and client, so the world never has to be sent over the network — only the *changes* to it (harvested resources, buildings, cleansed shrines).
-- **Day/night cycle:** a day lasts 4 minutes. At night, wolves and wraiths (who float through walls 👻) come hunting. Campfires light up the dark, heal nearby players, and monsters won't go near them.
-- **Co-op mechanics:** when you drop to 0 HP you're downed, not dead. A teammate has 30 seconds to revive you before you respawn at camp and drop half your loot. Guardians scale with party size and are much easier to take down together.
-- **Server-authoritative combat:** the Node server (`server.js`) owns enemies, health, inventories and world changes at 20 ticks/sec; clients predict their own movement for snappy controls.
-
-## Config
+- `server.js` is a Node server (plain `http` + `ws`). It runs an authoritative 30 tick/s simulation **per room** on a flat 2D plane and sends snapshots at 20 Hz. Rooms are created on demand and deleted when empty.
+- `public/client.js` renders that plane in 3D with **three.js**: shadows, a flickering candle light, animated bug legs and wings, crumb particles, and a follow camera. Your own movement is predicted on the client so it feels instant.
+- three.js is served from `node_modules`, so there are no CDN dependencies.
 
 | Env var | Default | Description |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP/WebSocket port |
-| `SEED` | random | World seed (same seed = same world) |
-| `START_PHASE` | `0.2` | Time of day the server starts at, `0`–`1` (night starts at `0.62`) |
 
 ## Tests
 
@@ -58,4 +61,4 @@ Touch: drag on the left half of the screen to move, tap the right half to attack
 npm test
 ```
 
-Spins up the server, connects two players, and checks joining, shared world changes, inventories and chat.
+Boots the server, connects players to rooms, and checks room isolation, movement sync, the shared shop, chat, waves spawning, shooting bugs, game over, and room cleanup.

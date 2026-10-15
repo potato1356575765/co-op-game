@@ -1,7 +1,7 @@
 {
   "name": "co-op-game",
-  "version": "1.0.0",
-  "description": "Wildlands — an open world online co-op browser game",
+  "version": "2.0.0",
+  "description": "Cake Defense 3D — an online co-op browser game where you protect a giant cake from hungry bugs",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -12,6 +12,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "three": "0.160.0",
     "ws": "^8.18.0"
   }
 }

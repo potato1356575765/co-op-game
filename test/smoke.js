@@ -1,77 +1,99 @@
-// Boots the server, connects two players, and checks the core co-op loop works.
+// Spins up the server, connects two players to the same room and checks the basics.
 process.env.PORT = 0;
-process.env.SEED = 4242;
 const assert = require('assert');
+const http = require('http');
 const WebSocket = require('ws');
-const World = require('../shared/world');
-const { server, SEED } = require('../server');
+const { server, rooms } = require('../server');
 
-function client(port, name) {
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+function connect(port, name, room) {
   const ws = new WebSocket(`ws://localhost:${port}`);
-  const inbox = [];
-  const waiters = [];
-  ws.on('message', (raw) => {
-    const m = JSON.parse(raw);
-    inbox.push(m);
-    for (const w of [...waiters]) if (w.pred(m)) { waiters.splice(waiters.indexOf(w), 1); w.resolve(m); }
+  const client = { ws, states: [], chats: [], welcome: null };
+  ws.on('message', raw => {
+    const msg = JSON.parse(raw);
+    if (msg.t === 'welcome') client.welcome = msg;
+    if (msg.t === 'state') client.states.push(msg);
+    if (msg.t === 'chat') client.chats.push(msg);
   });
-  const next = (pred, ms = 3000) => new Promise((resolve, reject) => {
-    const found = inbox.find(pred);
-    if (found) return resolve(found);
-    waiters.push({ pred, resolve });
-    setTimeout(() => reject(new Error(`${name}: timed out waiting`)), ms);
-  });
-  const send = (m) => ws.send(JSON.stringify(m));
-  return new Promise((res) => ws.on('open', () => { send({ t: 'join', name }); res({ ws, next, send, inbox }); }));
+  return new Promise(res => ws.on('open', () => { ws.send(JSON.stringify({ t: 'join', name, room })); res(client); }));
 }
 
-server.listen(0, async () => {
+const get = (port, p) => new Promise(res => http.get(`http://localhost:${port}${p}`, r => { r.resume(); res(r.statusCode); }));
+
+(async () => {
+  await new Promise(r => server.listening ? r() : server.once('listening', r));
   const port = server.address().port;
-  try {
-    const a = await client(port, 'Alice');
-    const b = await client(port, 'Bob');
-    const wa = await a.next((m) => m.t === 'welcome');
-    const wb = await b.next((m) => m.t === 'welcome');
-    assert.strictEqual(wa.seed, SEED);
-    assert.notStrictEqual(wa.id, wb.id);
 
-    const st = await a.next((m) => m.t === 'state' && m.players.length === 2);
-    assert.deepStrictEqual(st.players.map((p) => p.name).sort(), ['Alice', 'Bob']);
+  assert.strictEqual(await get(port, '/'), 200, 'serves index.html');
+  assert.strictEqual(await get(port, '/client.js'), 200, 'serves client.js');
+  assert.strictEqual(await get(port, '/vendor/three.module.js'), 200, 'serves three.js');
+  assert.notStrictEqual(await get(port, '/../server.js'), 200, 'blocks path traversal');
 
-    // Find a tree near spawn, walk next to it and chop it.
-    const world = World.create(SEED);
-    let tree = null;
-    for (let r = 1; r < 60 && !tree; r++)
-      for (let j = -r; j <= r && !tree; j++)
-        for (let i = -r; i <= r && !tree; i++) {
-          const tx = Math.floor(wa.spawn.x / 32) + i, ty = Math.floor(wa.spawn.y / 32) + j;
-          if (world.objectAt(tx, ty) === World.O.TREE) tree = [tx, ty];
-        }
-    assert(tree, 'there should be a tree near spawn');
-    // Hop toward the tree in steps (server rejects teleports).
-    const me = { x: wa.spawn.x, y: wa.spawn.y };
-    const goal = { x: tree[0] * 32 + 16, y: tree[1] * 32 + 48 };
-    while (Math.hypot(goal.x - me.x, goal.y - me.y) > 1) {
-      const d = Math.hypot(goal.x - me.x, goal.y - me.y), s = Math.min(d, 200);
-      me.x += ((goal.x - me.x) / d) * s; me.y += ((goal.y - me.y) / d) * s;
-      a.send({ t: 'pos', x: me.x, y: me.y, dir: 0 });
-      await new Promise((r) => setTimeout(r, 60));
-    }
-    a.send({ t: 'interact', tx: tree[0], ty: tree[1] });
-    const rm = await b.next((m) => m.t === 'removed' && m.key === tree.join(','));
-    assert(rm.on, 'Bob should see the tree get chopped');
-    const st2 = await a.next((m) => m.t === 'state' && m.players.find((p) => p.name === 'Alice').inv.wood === 3);
-    assert(st2);
+  const a = await connect(port, 'Alice', 'Test-Room');
+  const b = await connect(port, 'Bob', 'test-room');
+  const c = await connect(port, 'Carol', 'other');
+  await wait(300);
 
-    // Chat relays to the other player.
-    a.send({ t: 'chat', text: 'hi bob' });
-    const c = await b.next((m) => m.t === 'chat' && m.text === 'hi bob');
-    assert.strictEqual(c.from.name, 'Alice');
+  assert.ok(a.welcome && b.welcome, 'both got welcome');
+  assert.strictEqual(a.welcome.room, 'test-room');
+  assert.strictEqual(rooms.size, 2, 'two rooms exist');
+  const last = a.states.at(-1);
+  assert.strictEqual(last.players.length, 2, 'Alice sees two players');
+  assert.ok(!last.players.some(p => p.name === 'Carol'), 'rooms are isolated');
+  assert.strictEqual(last.cakeHp, 100);
 
-    console.log('smoke test passed ✔');
-    process.exit(0);
-  } catch (e) {
-    console.error(e);
-    process.exit(1);
-  }
-});
+  // movement
+  const before = last.players.find(p => p.id === a.welcome.id);
+  a.ws.send(JSON.stringify({ t: 'input', right: true, ax: 0, ay: 0 }));
+  await wait(400);
+  a.ws.send(JSON.stringify({ t: 'input', right: false }));
+  await wait(100);
+  const after = b.states.at(-1).players.find(p => p.id === a.welcome.id);
+  assert.ok(after.x > before.x + 30, `Bob sees Alice move (${before.x} -> ${after.x})`);
+
+  // can't buy without coins
+  b.ws.send(JSON.stringify({ t: 'buy', item: 'damage' }));
+  await wait(100);
+  assert.strictEqual(b.states.at(-1).upgrades.damage, 0, 'no free upgrades');
+
+  // shop works once the team has coins
+  rooms.get('test-room').coins = 100;
+  b.ws.send(JSON.stringify({ t: 'buy', item: 'damage' }));
+  await wait(100);
+  assert.strictEqual(a.states.at(-1).upgrades.damage, 1, 'upgrade is shared');
+  assert.strictEqual(a.states.at(-1).coins, 85, 'coins are shared');
+
+  // chat
+  a.ws.send(JSON.stringify({ t: 'chat', text: 'protect the cake!!' }));
+  await wait(100);
+  assert.ok(b.chats.some(m => m.name === 'Alice' && m.text === 'protect the cake!!'), 'chat delivered');
+  assert.ok(!c.chats.some(m => m.text === 'protect the cake!!'), 'chat stays in room');
+
+  // a wave starts, bugs spawn, and shooting kills them
+  const room = rooms.get('test-room');
+  room.timer = 0;
+  await wait(1500);
+  assert.strictEqual(a.states.at(-1).phase, 'wave');
+  assert.ok(a.states.at(-1).enemies.length > 0, 'bugs spawned');
+  room.upgrades.damage = 50;
+  const target = room.enemies[0];
+  a.ws.send(JSON.stringify({ t: 'input', shoot: true, ax: target.x, ay: target.y }));
+  await wait(1500);
+  a.ws.send(JSON.stringify({ t: 'input', shoot: false }));
+  assert.ok(room.kills > 0, 'squished a bug');
+
+  // cake death -> game over
+  room.cakeHp = 0;
+  await wait(200);
+  assert.strictEqual(a.states.at(-1).phase, 'gameover');
+
+  // leaving cleans up empty rooms
+  c.ws.close();
+  await wait(200);
+  assert.ok(!rooms.has('other'), 'empty room deleted');
+
+  console.log('✅ all smoke tests passed');
+  a.ws.close(); b.ws.close();
+  process.exit(0);
+})().catch(err => { console.error('❌', err); process.exit(1); });

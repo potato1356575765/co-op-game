@@ -1,110 +1,83 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Wildlands</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Cake Defense 3D</title>
   <style>
-    :root {
-      --panel: rgba(16, 20, 28, 0.78);
-      --border: rgba(255, 255, 255, 0.12);
-      --text: #f2f4f8;
-      --muted: #9aa4b5;
-      --accent: #ffd23f;
-    }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e14; color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
-    canvas#game { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
-    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; backdrop-filter: blur(4px); }
-    #hud { position: fixed; left: 12px; top: 12px; padding: 10px 12px; min-width: 220px; pointer-events: none; }
-    #hpbar { height: 12px; border-radius: 6px; background: #3a1a22; overflow: hidden; margin: 4px 0 8px; }
-    #hpfill { height: 100%; width: 100%; background: linear-gradient(90deg, #ff4d6d, #ff8fa3); transition: width 0.15s; }
-    .row { display: flex; gap: 12px; flex-wrap: wrap; }
-    .row span b { color: var(--accent); }
-    #clock { color: var(--muted); font-size: 12px; margin-top: 6px; }
-    #minimap { position: fixed; right: 12px; top: 12px; width: 180px; height: 180px; border-radius: 10px; border: 1px solid var(--border); image-rendering: pixelated; }
-    #party { position: fixed; right: 12px; top: 200px; width: 180px; padding: 8px 10px; pointer-events: none; font-size: 13px; }
-    #party div { display: flex; justify-content: space-between; gap: 6px; }
-    #chat { position: fixed; left: 12px; bottom: 12px; width: min(420px, calc(100vw - 24px)); }
-    #log { max-height: 180px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: 8px 10px; font-size: 13px; text-shadow: 0 1px 2px #000; pointer-events: none; }
-    #log .sys { color: #b8c4ff; }
-    #chatInput { display: none; width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit; outline: none; }
-    #hint { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); padding: 6px 12px; display: none; pointer-events: none; }
-    #toolbar { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 8px; padding: 8px; pointer-events: none; }
-    .slot { width: 112px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); font-size: 12px; color: var(--muted); }
-    .slot b { color: var(--text); display: block; font-size: 13px; }
-    .slot.on { border-color: var(--accent); background: rgba(255, 210, 63, 0.15); color: var(--text); }
-    #toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); padding: 8px 16px; display: none; font-weight: 600; }
-    #help { position: fixed; right: 12px; bottom: 12px; padding: 10px 12px; font-size: 12px; color: var(--muted); max-width: 230px; }
-    #help b { color: var(--text); }
-    #join { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgba(20, 40, 30, 0.85), rgba(5, 8, 12, 0.96)); z-index: 10; }
-    #join .card { padding: 28px 28px 22px; width: min(400px, calc(100vw - 32px)); text-align: center; }
-    #join h1 { margin: 0 0 4px; font-size: 40px; letter-spacing: 1px; color: var(--accent); text-shadow: 0 3px 0 #7a5a00; }
-    #join p { color: var(--muted); margin: 0 0 18px; }
-    #join input { width: 100%; padding: 12px; font: inherit; font-size: 16px; border-radius: 8px; border: 1px solid var(--border); background: #111722; color: var(--text); margin-bottom: 12px; }
-    #join button { width: 100%; padding: 12px; font: inherit; font-size: 16px; font-weight: 700; border: 0; border-radius: 8px; background: var(--accent); color: #2a2000; cursor: pointer; }
-    #join button:hover { filter: brightness(1.08); }
-    #join small { display: block; margin-top: 14px; color: var(--muted); }
-    #status { color: #ff8fa3; margin-top: 10px; min-height: 1em; }
-    #downed { position: fixed; inset: 0; display: none; place-items: center; pointer-events: none; background: radial-gradient(ellipse at center, transparent 30%, rgba(120, 0, 20, 0.45)); }
-    #downed div { padding: 14px 20px; text-align: center; font-size: 18px; font-weight: 700; }
-    @media (max-width: 700px) { #help, #party { display: none; } #minimap { width: 120px; height: 120px; } }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1430; font-family: 'Trebuchet MS', system-ui, sans-serif; color: #fff; user-select: none; }
+    canvas { display: block; }
+    .hidden { display: none !important; }
+
+    #join { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, #ff8fc2, #6b3fa0 70%); z-index: 10; }
+    #join .card { background: #fff3; backdrop-filter: blur(8px); padding: 32px; border-radius: 24px; text-align: center; width: min(92vw, 380px); box-shadow: 0 10px 40px #0005; }
+    #join h1 { margin: 0 0 4px; font-size: 42px; text-shadow: 0 4px 0 #c2185b; }
+    #join p { margin: 0 0 20px; opacity: .9; }
+    #join input { width: 100%; padding: 12px 14px; margin: 6px 0; border-radius: 12px; border: none; font-size: 18px; text-align: center; }
+    #join button { width: 100%; margin-top: 12px; padding: 14px; font-size: 22px; font-weight: bold; border: none; border-radius: 14px; background: #ffd23f; color: #6b3fa0; cursor: pointer; box-shadow: 0 5px 0 #c99a00; }
+    #join button:active { transform: translateY(3px); box-shadow: 0 2px 0 #c99a00; }
+    #join small { display: block; margin-top: 14px; opacity: .8; line-height: 1.5; }
+
+    #hud { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px; flex-wrap: wrap; pointer-events: none; }
+    .pill { background: #0008; padding: 8px 14px; border-radius: 999px; font-weight: bold; font-size: 16px; }
+    #cakebar { position: fixed; top: 58px; left: 50%; transform: translateX(-50%); width: min(70vw, 420px); height: 18px; background: #0008; border-radius: 9px; overflow: hidden; pointer-events: none; }
+    #cakebar div { height: 100%; background: linear-gradient(90deg, #ff6b9d, #ffd23f); transition: width .2s; }
+    #banner { position: fixed; top: 30%; left: 0; right: 0; text-align: center; font-size: clamp(28px, 6vw, 56px); font-weight: bold; text-shadow: 0 4px 0 #0007; pointer-events: none; }
+
+    #shop { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; width: min(96vw, 720px); }
+    #shop button { background: #fff; color: #333; border: none; border-radius: 14px; padding: 10px 14px; font-size: 14px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 0 #0005; min-width: 140px; }
+    #shop button:disabled { opacity: .45; cursor: default; }
+    #shop button b { color: #c2185b; }
+
+    #scores { position: fixed; top: 90px; right: 12px; background: #0007; border-radius: 12px; padding: 8px 12px; font-size: 14px; min-width: 150px; pointer-events: none; }
+    #scores div { display: flex; justify-content: space-between; gap: 12px; }
+
+    #chat { position: fixed; left: 12px; bottom: 12px; width: min(60vw, 340px); font-size: 14px; pointer-events: none; }
+    #chatlog div { background: #0007; padding: 3px 8px; border-radius: 8px; margin-top: 3px; animation: fade 10s forwards; }
+    @keyframes fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+    #chatinput { width: 100%; margin-top: 6px; padding: 8px; border-radius: 8px; border: none; pointer-events: auto; }
+
+    #labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+    .label { position: absolute; transform: translate(-50%, -100%); font-size: 13px; font-weight: bold; text-shadow: 0 1px 2px #000, 0 0 4px #000; white-space: nowrap; text-align: center; }
+    .label .bar { width: 44px; height: 5px; background: #0009; border-radius: 3px; margin: 2px auto 0; overflow: hidden; }
+    .label .bar i { display: block; height: 100%; background: #7cff6b; }
+
+    #help { position: fixed; bottom: 12px; right: 12px; background: #0007; border-radius: 12px; padding: 8px 12px; font-size: 12px; line-height: 1.6; pointer-events: none; }
+    @media (max-width: 700px) { #help, #scores { display: none; } }
   </style>
+  <script type="importmap">{ "imports": { "three": "/vendor/three.module.js" } }</script>
 </head>
 <body>
-  <canvas id="game"></canvas>
-
-  <div id="hud" class="panel">
-    <div><b id="pname">You</b> &middot; Sword Lv <b id="sword">1</b></div>
-    <div id="hpbar"><div id="hpfill"></div></div>
-    <div class="row">
-      <span>🪵 <b id="wood">0</b></span>
-      <span>🪨 <b id="stone">0</b></span>
-      <span>🪙 <b id="gold">0</b></span>
-      <span>⛩️ <b id="shrines">0</b></span>
-    </div>
-    <div id="clock">Day 1 · Morning</div>
-  </div>
-
-  <canvas id="minimap" width="120" height="120"></canvas>
-  <div id="party" class="panel"></div>
-
-  <div id="chat">
-    <div id="log"></div>
-    <input id="chatInput" maxlength="140" placeholder="Say something to your party… (Enter to send, Esc to cancel)" />
-  </div>
-
-  <div id="hint" class="panel"></div>
-  <div id="toast" class="panel"></div>
-  <div id="downed"><div class="panel" id="downedText">You're down!</div></div>
-
-  <div id="toolbar" class="panel">
-    <div class="slot" id="slot1"><b>1 · Campfire</b>5 wood · heals &amp; scares monsters</div>
-    <div class="slot" id="slot2"><b>2 · Wall</b>2 stone · blocks the way</div>
-    <div class="slot" id="slotU"><b>U · Upgrade</b><span id="upcost">15</span> gold · sword +1</div>
-  </div>
-
-  <div id="help" class="panel">
-    <b>WASD</b> move · <b>Click</b> attack<br />
-    <b>E</b> chop / mine / loot / revive<br />
-    <b>1/2</b> build mode · <b>Click</b> place · <b>Esc</b> cancel<br />
-    <b>X</b> demolish · <b>U</b> upgrade sword<br />
-    <b>Enter</b> chat · <b>H</b> hide help<br />
-    Find ⛩️ shrines and slay their Guardians together!
-  </div>
-
   <div id="join">
-    <form class="card panel" id="joinForm">
-      <h1>WILDLANDS</h1>
-      <p>An endless open world. Better with friends.</p>
-      <input id="nameInput" maxlength="16" placeholder="Your name" autocomplete="off" />
-      <button type="submit">Play</button>
-      <div id="status"></div>
-      <small>Share this page's URL with friends to play together.</small>
-    </form>
+    <div class="card">
+      <h1>🍰 Cake Defense</h1>
+      <p>The bugs are hungry. The cake is sacred. Protect it with your besties.</p>
+      <input id="name" placeholder="Your baker name" maxlength="16">
+      <input id="room" placeholder="Room code (share it!)" maxlength="24">
+      <button id="play">PLAY</button>
+      <small>WASD to move · mouse to aim · click to shoot sprinkles<br>Same room code = same game 🤝</small>
+    </div>
   </div>
 
-  <script src="/shared/world.js"></script>
-  <script src="/client.js"></script>
+  <div id="labels"></div>
+  <div id="hud" class="hidden">
+    <span class="pill" id="wave">Wave 0</span>
+    <span class="pill" id="coins">🪙 0</span>
+    <span class="pill" id="kills">🐜 0</span>
+    <span class="pill" id="roomname">Room</span>
+  </div>
+  <div id="cakebar" class="hidden"><div></div></div>
+  <div id="banner"></div>
+  <div id="scores" class="hidden"></div>
+  <div id="shop" class="hidden"></div>
+  <div id="chat" class="hidden"><div id="chatlog"></div><input id="chatinput" class="hidden" maxlength="140" placeholder="Say something…"></div>
+  <div id="help" class="hidden">
+    <b>WASD</b> move · <b>Mouse</b> aim · <b>Click</b> shoot<br>
+    <b>1–4</b> shop (between waves) · <b>Enter</b> chat<br>
+    Stand next to a downed friend to revive 💖
+  </div>
+
+  <script type="module" src="/client.js"></script>
 </body>
 </html>
