@@ -1,0 +1,29 @@
+# Official Cake Defense server on Fly.io. Deploy with the "Deploy server" GitHub Action.
+# Lobbies live in memory, so this must stay ONE machine (the volume below also pins it to one).
+app = "cake-defense-potato"
+primary_region = "iad"
+
+[env]
+  PORT = "3000"
+  TRUST_PROXY = "1"
+  CAKE_BANS_FILE = "/data/bans.json"
+
+[[mounts]]
+  source = "cake_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 400
+    hard_limit = 500
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

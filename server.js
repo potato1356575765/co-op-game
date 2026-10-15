@@ -3,6 +3,7 @@
 
 const http = require('http');
 const fs = require('fs');
+const crypto = require('crypto');
 const os = require('os');
 const path = require('path');
 const { WebSocketServer } = require('ws');
@@ -361,7 +362,7 @@ const server = http.createServer((req, res) => {
   const pathname = new URL(req.url, 'http://x').pathname;
   if (pathname === '/info') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-    return res.end(JSON.stringify({ game: 'cake-defense', port: server.address().port, lan: lanAddresses() }));
+    return res.end(JSON.stringify({ game: 'cake-defense', port: server.address().port, lan: lanAddresses(), official: OFFICIAL_SERVER }));
   }
   const file = ASSETS[pathname];
   if (!file) { res.writeHead(404); return res.end('Not found'); }
@@ -426,10 +427,39 @@ function parseDuration(text) {
 
 const isLoopback = ip => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip);
 
+// --- official server mode ---
+// Set CAKE_ADMIN_TOKEN on the official server: then only people who log in with `/admin <token>`
+// can kick/ban, and their bans cover every lobby on it. Without a token (playing on your Wi-Fi),
+// whoever runs the server on this computer is the admin.
+const ADMIN_TOKEN = process.env.CAKE_ADMIN_TOKEN || '';
+const TRUST_PROXY = process.env.TRUST_PROXY === '1'; // behind Fly.io's proxy: read the real client IP
+const OFFICIAL_SERVER = process.env.CAKE_OFFICIAL_SERVER || require('./package.json').cakeDefense?.officialServer || null;
+const MAX_PLAYERS_PER_ROOM = 8;
+const MAX_ADMIN_TRIES = 5;
+
+function clientIp(req) {
+  if (TRUST_PROXY) {
+    const forwarded = req.headers['fly-client-ip'] || String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    if (forwarded) return forwarded;
+  }
+  return req.socket.remoteAddress;
+}
+
+function adminTokenMatches(token) {
+  if (!ADMIN_TOKEN) return false;
+  const a = crypto.createHash('sha256').update(String(token)).digest();
+  const b = crypto.createHash('sha256').update(ADMIN_TOKEN).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
 // Host-only chat commands. Returns the reply to show the host.
 function runCommand(room, host, text) {
   const [cmd, target, ...rest] = text.slice(1).split(/\s+/);
-  const findPlayer = () => [...room.players.values()].find(p => p.name.toLowerCase() === (target || '').toLowerCase());
+  // look in this lobby first, then every lobby on the server
+  const findPlayer = () => {
+    const match = p => p.name.toLowerCase() === (target || '').toLowerCase();
+    return [...room.players.values()].find(match) || [...rooms.values()].flatMap(r => [...r.players.values()]).find(match);
+  };
   switch ((cmd || '').toLowerCase()) {
     case 'kick': {
       const p = findPlayer();
@@ -437,8 +467,7 @@ function runCommand(room, host, text) {
       if (p === host) return "You can't kick yourself 😅";
       if (p.ws.readyState === 1) p.ws.send(JSON.stringify({ t: 'kicked' }));
       p.ws.close(4001, 'Kicked');
-      room.say(`${p.name} was kicked.`);
-      return null;
+      return `Kicked ${p.name}.`;
     }
     case 'ban': {
       const p = findPlayer();
@@ -447,8 +476,7 @@ function runCommand(room, host, text) {
       const duration = parseDuration(rest[0]);
       const reason = rest.slice(duration ? 1 : 0).join(' ');
       ban(p, reason, duration);
-      room.say(`🔨 ${p.name} was banned${duration ? ` for ${rest[0]}` : ''}.`);
-      return null;
+      return `🔨 Banned ${p.name}${duration ? ` for ${rest[0]}` : ''}.`;
     }
     case 'unban': {
       const before = bans.length;
@@ -474,7 +502,9 @@ const CHAT_COOLDOWN = 0.75;
 const wss = new WebSocketServer({ server, maxPayload: 4096 });
 
 wss.on('connection', (ws, req) => {
-  const ip = req.socket.remoteAddress;
+  const ip = clientIp(req);
+  let isAdmin = !ADMIN_TOKEN && isLoopback(ip);
+  let adminTries = 0;
   let room = null;
   let player = null;
 
@@ -499,6 +529,11 @@ wss.on('connection', (ws, req) => {
       const existing = findBan(playerId, isLoopback(ip) ? null : ip);
       if (existing) return sendBanned(ws, existing);
       room = getRoom(msg.room);
+      if (room.players.size >= MAX_PLAYERS_PER_ROOM) {
+        ws.send(JSON.stringify({ t: 'full', max: MAX_PLAYERS_PER_ROOM }));
+        if (room.players.size === 0) rooms.delete(room.id);
+        return ws.close(4002, 'Room full');
+      }
       player = room.addPlayer(ws, msg.name);
       player.playerId = playerId;
       player.ip = isLoopback(ip) ? null : ip; // never IP-ban the host's own computer
@@ -520,7 +555,20 @@ wss.on('connection', (ws, req) => {
       lastChat = now;
       const text = String(msg.text || '').trim().slice(0, 140);
       if (text.startsWith('/')) {
-        const reply = isLoopback(ip) ? runCommand(room, player, text) : 'Only the host can use commands.';
+        let reply;
+        if (/^\/admin\b/i.test(text)) {
+          if (adminTokenMatches(text.split(/\s+/)[1] || '')) {
+            isAdmin = true;
+            reply = "You're an admin now 🛡️ Type /help for commands.";
+          } else {
+            reply = ADMIN_TOKEN ? 'Wrong admin password.' : 'This server has no admin password.';
+            if (ADMIN_TOKEN && ++adminTries >= MAX_ADMIN_TRIES) return ws.close(1008, 'Too many admin attempts');
+          }
+        } else if (isAdmin) {
+          reply = runCommand(room, player, text);
+        } else {
+          reply = ADMIN_TOKEN ? 'Only admins can use commands.' : 'Only the host can use commands.';
+        }
         if (reply && ws.readyState === 1) ws.send(JSON.stringify({ t: 'chat', name: '🛡️', text: reply }));
         return;
       }

@@ -1,0 +1,23 @@
+name: Deploy server
+
+# Run it from the Actions tab ("Run workflow"). Needs the repo secret FLY_API_TOKEN,
+# and optionally CAKE_ADMIN_TOKEN (the password for /admin in game).
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      CAKE_ADMIN_TOKEN: ${{ secrets.CAKE_ADMIN_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Create the app and its storage (first run only)
+        run: |
+          APP=$(sed -n 's/^app = "\(.*\)"/\1/p' fly.toml)
+          flyctl status --app "$APP" > /dev/null 2>&1 || flyctl apps create "$APP"
+          flyctl volumes list --app "$APP" | grep -q cake_data || flyctl volumes create cake_data --app "$APP" --region iad --size 1 --yes
+          if [ -n "$CAKE_ADMIN_TOKEN" ]; then flyctl secrets set CAKE_ADMIN_TOKEN="$CAKE_ADMIN_TOKEN" --app "$APP" --stage; fi
+      - run: flyctl deploy --remote-only --ha=false

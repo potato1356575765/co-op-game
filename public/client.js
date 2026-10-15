@@ -343,6 +343,7 @@ function burst(x, z, color, n = 10, y = 1) {
 // ---------- networking ----------
 let ws = null;
 let kicked = false;
+let joinFailure = null;
 let myId = null;
 let state = null;
 let shopInfo = null;
@@ -398,7 +399,7 @@ function showBanned(msg) {
   }
   showBlocker({
     title: "🚫 You're banned", message: `Reason: ${msg.reason}`, code,
-    detail: "The host of this game banned you. You can still host your own games or join other people's.",
+    detail: 'You were banned from this server.',
     action: 'Back to menu', onAction: () => { blocked = false; $('blocker').classList.add('hidden'); goHome(); },
   });
 }
@@ -419,13 +420,52 @@ function showJoinError(text) {
   $('joinerror').classList.remove('hidden');
 }
 
-// tell the host which address friends should type in
-if (['localhost', '127.0.0.1'].includes(location.hostname)) {
+// The menu on your own computer offers Play Online (the official server) and Wi-Fi play.
+// On someone else's server (official or a friend's) you just play there.
+const isLocalHome = ['localhost', '127.0.0.1'].includes(location.hostname);
+let officialServer = null;
+if (isLocalHome) {
   fetch('/info').then(r => r.json()).then(info => {
+    if (info.official) {
+      officialServer = info.official.replace(/\/+$/, '');
+      $('online').classList.remove('hidden');
+      $('lanlabel').classList.remove('hidden');
+      $('play').textContent = 'PLAY ON WI-FI';
+    }
     if (!info.lan.length) return;
     const port = info.port === 3000 ? '' : `:${info.port}`;
     $('myaddr').innerHTML = `Friends on your Wi-Fi join you with:<br><b>${info.lan.map(ip => ip + port).join('</b> or <b>')}</b>`;
   }).catch(() => {});
+} else {
+  $('host').classList.add('hidden');
+}
+$('online').onclick = () => {
+  const { name, room } = menuValues();
+  goToServer(officialServer, name, room, $('online'), "Couldn't reach the online server. Check your internet and try again.");
+};
+
+function menuValues() {
+  const name = $('name').value.trim() || 'Baker' + Math.floor(Math.random() * 1000);
+  localStorageSet('cd-name', name);
+  return { name, room: $('room').value.trim() || 'lobby' };
+}
+
+// Another server (the official one or a friend's) serves the game too, so we just go there.
+async function goToServer(base, name, room, button, errorText) {
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Connecting…';
+  try {
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), 10000); // the online server may need a few seconds to wake up
+    const info = await (await fetch(`${base}/info`, { signal: ctrl.signal })).json();
+    if (info.game !== 'cake-defense') throw new Error();
+    location.href = `${base}/?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}&autoplay=1`;
+  } catch {
+    showJoinError(errorText);
+    button.disabled = false;
+    button.textContent = label;
+  }
 }
 
 // go back to the menu (on the host's own computer when we're in the app)
@@ -442,39 +482,24 @@ for (const id of ['name', 'room']) $(id).addEventListener('keydown', e => { if (
 
 async function join() {
   if (blocked) return;
-  const name = $('name').value.trim() || 'Baker' + Math.floor(Math.random() * 1000);
-  const room = $('room').value.trim() || 'lobby';
-  localStorageSet('cd-name', name);
+  const { name, room } = menuValues();
   const host = $('host').value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   if (host && host !== location.host) {
-    // the friend's computer serves the game too, so we just go there
     const addr = /:\d+$/.test(host) ? host : `${host}:3000`;
-    $('play').disabled = true;
-    $('play').textContent = 'Connecting…';
-    try {
-      const ctrl = new AbortController();
-      setTimeout(() => ctrl.abort(), 4000);
-      const info = await (await fetch(`http://${addr}/info`, { signal: ctrl.signal })).json();
-      if (info.game !== 'cake-defense') throw new Error();
-      location.href = `http://${addr}/?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}&autoplay=1`;
-    } catch {
-      showJoinError(`Couldn't find a Cake Defense game at ${addr}. Check the address and that you're on the same Wi-Fi.`);
-      $('play').disabled = false;
-      $('play').textContent = 'PLAY';
-    }
-    return;
+    return goToServer(`http://${addr}`, name, room, $('play'),
+      `Couldn't find a Cake Defense game at ${addr}. Check the address and that you're on the same Wi-Fi.`);
   }
+  const playerId = await getPlayerId();
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}`);
-  const playerId = await getPlayerId();
   ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name, room, playerId }));
   ws.onmessage = e => onMessage(JSON.parse(e.data));
   ws.onclose = () => {
     ws = null;
     if (blocked) return;
-    $('banner').innerHTML = kicked ? 'You were kicked by the host 👢<br><small>Press Esc for the menu</small>'
+    $('banner').innerHTML = kicked ? 'You were kicked 👢<br><small>Press Esc for the menu</small>'
       : 'Disconnected 😢<br><small>Press Esc for the menu</small>';
-    if (!myId) { $('join').classList.remove('hidden'); $('banner').innerHTML = ''; showJoinError("Couldn't connect to the game."); }
+    if (!myId) { $('join').classList.remove('hidden'); $('banner').innerHTML = ''; showJoinError(joinFailure || "Couldn't connect to the game."); }
   };
   $('join').classList.add('hidden');
 }
@@ -490,6 +515,8 @@ function onMessage(msg) {
     for (const id of ['hud', 'cakebar', 'scores', 'chat', 'help']) $(id).classList.remove('hidden');
   } else if (msg.t === 'banned') {
     showBanned(msg);
+  } else if (msg.t === 'full') {
+    joinFailure = `That room is full (${msg.max} players max). Try a different room code!`;
   } else if (msg.t === 'kicked') {
     kicked = true;
   } else if (msg.t === 'state') {
