@@ -11,6 +11,22 @@ npm start
 
 Open http://localhost:3000, pick a name and a **room code**, then hit **Play**. Anyone who enters the same room code joins your game, and you can also just share the URL (`?room=yourcode`).
 
+### 🪟 Windows .exe (no Node needed)
+
+Grab `CakeDefense.exe` from the latest **Build exe** run in this repo's **Actions** tab (or build it yourself, see below) and double-click it. A console window opens with the server running, and your browser opens the game. Keep that window open while you play, and close it to stop.
+
+The console prints a `http://192.168.x.x:3000` link that friends on your Wi-Fi can open. The first time, Windows Firewall will ask whether to allow it on your network, so click **Allow**. The exe isn't code-signed, so SmartScreen may say "Windows protected your PC". Click **More info → Run anyway**.
+
+Build it yourself (from Windows, macOS or Linux, using Node 22):
+
+```bash
+npm install
+npm run build:exe            # -> dist/CakeDefense.exe
+npm run build:exe -- linux   # -> dist/CakeDefense-linux
+```
+
+This uses Node's built-in [single executable applications](https://nodejs.org/api/single-executable-applications.html): it bundles the server with esbuild, embeds the client and three.js as assets, and injects them into the official Node binary.
+
 ### Playing with friends online
 
 - **Same Wi‑Fi:** friends open `http://<your-local-ip>:3000`.

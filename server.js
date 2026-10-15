@@ -342,19 +342,34 @@ function getRoom(id) {
 }
 
 // --- static files ---
-const PUBLIC = path.join(__dirname, 'public');
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+// When packaged as a single executable (.exe), files are embedded as SEA assets instead of read from disk.
+const sea = (() => {
+  try { const m = require('node:sea'); return m.isSea() ? m : null; } catch { return null; }
+})();
+const ASSETS = {
+  '/': 'index.html',
+  '/index.html': 'index.html',
+  '/client.js': 'client.js',
+  '/vendor/three.module.js': 'three.module.js',
+};
+const MIME = { '.html': 'text/html', '.js': 'text/javascript' };
 
-const VENDOR = { '/vendor/three.module.js': path.join(path.dirname(require.resolve('three')), 'three.module.js') };
+function readAsset(name, cb) {
+  if (sea) {
+    try { return cb(null, Buffer.from(sea.getAsset(name))); } catch (err) { return cb(err); }
+  }
+  const file = name === 'three.module.js'
+    ? path.join(path.dirname(require.resolve('three')), 'three.module.js')
+    : path.join(__dirname, 'public', name);
+  fs.readFile(file, cb);
+}
 
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, 'http://x');
-  const file = VENDOR[url.pathname] ||
-    path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname));
-  if (!VENDOR[url.pathname] && !file.startsWith(PUBLIC + path.sep)) { res.writeHead(403); return res.end(); }
-  fs.readFile(file, (err, data) => {
-    if (err) { res.writeHead(404); return res.end('Not found'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+  const name = ASSETS[new URL(req.url, 'http://x').pathname];
+  if (!name) { res.writeHead(404); return res.end('Not found'); }
+  readAsset(name, (err, data) => {
+    if (err) { res.writeHead(500); return res.end('Missing asset'); }
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(name)] });
     res.end(data);
   });
 });
@@ -411,8 +426,37 @@ setInterval(() => {
   }
 }, 1000 / TICK_RATE);
 
+function openBrowser(url) {
+  const { spawn } = require('child_process');
+  const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]]
+    : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+  try { spawn(cmd, args, { stdio: 'ignore', detached: true }).on('error', () => {}).unref(); } catch {}
+}
+
+function lanAddresses() {
+  return Object.values(require('os').networkInterfaces()).flat()
+    .filter(a => a && a.family === 'IPv4' && !a.internal).map(a => a.address);
+}
+
+server.on('error', err => {
+  if (sea && err.code === 'EADDRINUSE') {
+    // Probably already running in another window: just open the game.
+    console.log(`Port ${PORT} is already in use — opening the game that's already running.`);
+    openBrowser(`http://localhost:${PORT}`);
+    setTimeout(() => process.exit(0), 3000);
+  } else {
+    throw err;
+  }
+});
+
 server.listen(PORT, () => {
-  console.log(`🍰 Cake Defense running at http://localhost:${server.address().port}`);
+  const port = server.address().port;
+  console.log(`🍰 Cake Defense running at http://localhost:${port}`);
+  if (sea) {
+    for (const ip of lanAddresses()) console.log(`   Friends on your Wi-Fi can join at http://${ip}:${port}`);
+    console.log('   Keep this window open while you play. Close it to stop the server.');
+    if (!process.env.NO_BROWSER) openBrowser(`http://localhost:${port}`);
+  }
 });
 
 module.exports = { server, rooms };
