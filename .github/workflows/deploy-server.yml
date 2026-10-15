@@ -21,30 +21,34 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-      CAKE_ADMIN_TOKEN: ${{ secrets.CAKE_ADMIN_TOKEN }}
+      HAS_FLY_TOKEN: ${{ secrets.FLY_API_TOKEN != '' }}
     steps:
       - name: Skip until Fly.io is set up
-        if: env.FLY_API_TOKEN == ''
+        if: env.HAS_FLY_TOKEN != 'true'
         run: echo "::notice::No FLY_API_TOKEN secret yet, so nothing was deployed."
       - uses: actions/checkout@v4
-        if: env.FLY_API_TOKEN != ''
+        if: env.HAS_FLY_TOKEN == 'true'
       - uses: actions/setup-node@v4
-        if: env.FLY_API_TOKEN != ''
+        if: env.HAS_FLY_TOKEN == 'true'
         with:
           node-version: 22
       - name: Test
-        if: env.FLY_API_TOKEN != ''
+        if: env.HAS_FLY_TOKEN == 'true'
         run: npm ci && npm test
       - uses: superfly/flyctl-actions/setup-flyctl@master
-        if: env.FLY_API_TOKEN != ''
+        if: env.HAS_FLY_TOKEN == 'true'
       - name: Create the app and its storage (first run only)
-        if: env.FLY_API_TOKEN != ''
+        if: env.HAS_FLY_TOKEN == 'true'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          CAKE_ADMIN_TOKEN: ${{ secrets.CAKE_ADMIN_TOKEN }}
         run: |
           APP=$(sed -n 's/^app = "\(.*\)"/\1/p' fly.toml)
           flyctl status --app "$APP" > /dev/null 2>&1 || flyctl apps create "$APP"
           flyctl volumes list --app "$APP" | grep -q cake_data || flyctl volumes create cake_data --app "$APP" --region iad --size 1 --yes
           if [ -n "$CAKE_ADMIN_TOKEN" ]; then flyctl secrets set CAKE_ADMIN_TOKEN="$CAKE_ADMIN_TOKEN" --app "$APP" --stage; fi
       - name: Deploy
-        if: env.FLY_API_TOKEN != ''
+        if: env.HAS_FLY_TOKEN == 'true'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: flyctl deploy --remote-only --ha=false

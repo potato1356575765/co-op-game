@@ -4,6 +4,8 @@ const os = require('os');
 const path = require('path');
 const BANS_FILE = path.join(os.tmpdir(), `cake-bans-${process.pid}.json`);
 process.env.CAKE_BANS_FILE = BANS_FILE;
+// this suite tests Wi-Fi hosting, so make sure no official-server settings leak in
+for (const k of ['CAKE_ADMIN_TOKEN', 'TRUST_PROXY']) delete process.env[k];
 const assert = require('assert');
 const http = require('http');
 const WebSocket = require('ws');
