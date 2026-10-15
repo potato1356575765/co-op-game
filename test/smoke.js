@@ -88,9 +88,13 @@ const get = (port, p) => new Promise(res => http.get(`http://localhost:${port}${
   assert.strictEqual(a.states.at(-1).phase, 'wave');
   assert.ok(a.states.at(-1).enemies.length > 0, 'bugs spawned');
   room.upgrades.damage = 50;
-  // keep aiming at a bug that has walked onto the blanket (bugs spawn just off the edge)
-  for (let i = 0; i < 60 && !room.kills; i++) {
-    const target = room.enemies.find(e => e.x > 0 && e.x < 1600 && e.y > 0 && e.y < 1000);
+  // keep aiming at the nearest bug on the blanket (bugs spawn off the edge, and sprinkles only
+  // fly ~780px, so wait for one to march close enough on its way to the cake)
+  const shooter = room.players.get(a.welcome.id);
+  for (let i = 0; i < 300 && !room.kills; i++) {
+    const target = room.enemies
+      .filter(e => e.x > 0 && e.x < 1600 && e.y > 0 && e.y < 1000)
+      .sort((p, q) => Math.hypot(p.x - shooter.x, p.y - shooter.y) - Math.hypot(q.x - shooter.x, q.y - shooter.y))[0];
     if (target) a.ws.send(JSON.stringify({ t: 'input', shoot: true, ax: target.x, ay: target.y }));
     await wait(50);
   }
