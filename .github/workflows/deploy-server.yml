@@ -1,9 +1,21 @@
 name: Deploy server
 
-# Run it from the Actions tab ("Run workflow"). Needs the repo secret FLY_API_TOKEN,
-# and optionally CAKE_ADMIN_TOKEN (the password for /admin in game).
+# Deploys the official server to Fly.io whenever server files change (or from the Actions tab).
+# Skips itself until the repo secret FLY_API_TOKEN exists. CAKE_ADMIN_TOKEN (optional secret)
+# is the password for /admin in game.
 on:
+  push:
+    paths:
+      - server.js
+      - public/**
+      - Dockerfile
+      - fly.toml
+      - package.json
+      - package-lock.json
+      - .github/workflows/deploy-server.yml
   workflow_dispatch:
+
+concurrency: deploy-server
 
 jobs:
   deploy:
@@ -12,12 +24,27 @@ jobs:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
       CAKE_ADMIN_TOKEN: ${{ secrets.CAKE_ADMIN_TOKEN }}
     steps:
+      - name: Skip until Fly.io is set up
+        if: env.FLY_API_TOKEN == ''
+        run: echo "::notice::No FLY_API_TOKEN secret yet, so nothing was deployed."
       - uses: actions/checkout@v4
+        if: env.FLY_API_TOKEN != ''
+      - uses: actions/setup-node@v4
+        if: env.FLY_API_TOKEN != ''
+        with:
+          node-version: 22
+      - name: Test
+        if: env.FLY_API_TOKEN != ''
+        run: npm ci && npm test
       - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: env.FLY_API_TOKEN != ''
       - name: Create the app and its storage (first run only)
+        if: env.FLY_API_TOKEN != ''
         run: |
           APP=$(sed -n 's/^app = "\(.*\)"/\1/p' fly.toml)
           flyctl status --app "$APP" > /dev/null 2>&1 || flyctl apps create "$APP"
           flyctl volumes list --app "$APP" | grep -q cake_data || flyctl volumes create cake_data --app "$APP" --region iad --size 1 --yes
           if [ -n "$CAKE_ADMIN_TOKEN" ]; then flyctl secrets set CAKE_ADMIN_TOKEN="$CAKE_ADMIN_TOKEN" --app "$APP" --stage; fi
-      - run: flyctl deploy --remote-only --ha=false
+      - name: Deploy
+        if: env.FLY_API_TOKEN != ''
+        run: flyctl deploy --remote-only --ha=false

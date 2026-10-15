@@ -46,7 +46,7 @@ Deploying, all from GitHub:
 3. In this repo on GitHub: **Settings → Secrets and variables → Actions → New repository secret**:
    - `FLY_API_TOKEN`: the token from step 2
    - `CAKE_ADMIN_TOKEN`: a long password you make up, for admin commands in game
-4. **Actions → Deploy server → Run workflow.** The first run creates the app and its storage.
+4. Push any change to the server (or re-run the latest **Deploy server** run in the Actions tab). It deploys automatically once `FLY_API_TOKEN` exists, and the first run creates the app and its storage.
 
 The app name is set in `fly.toml` (`cake-defense-potato`), which gives you `https://cake-defense-potato.fly.dev`. If the name is taken, change it in both `fly.toml` and `package.json`.
 
