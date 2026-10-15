@@ -360,6 +360,10 @@ function lanAddresses() {
 
 const server = http.createServer((req, res) => {
   const pathname = new URL(req.url, 'http://x').pathname;
+  if (pathname === '/healthz') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    return res.end('ok');
+  }
   if (pathname === '/info') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     return res.end(JSON.stringify({ game: 'cake-defense', port: server.address().port, lan: lanAddresses(), official: OFFICIAL_SERVER }));

@@ -37,6 +37,7 @@ const get = (port, p) => new Promise(res => http.get(`http://localhost:${port}${
   assert.strictEqual(await get(port, '/icon.png'), 200, 'serves icon');
   assert.notStrictEqual(await get(port, '/../server.js'), 200, 'blocks path traversal');
   assert.strictEqual(await get(port, '/info'), 200, 'serves /info');
+  assert.strictEqual(await get(port, '/healthz'), 200, 'health check');
 
   const a = await connect(port, 'Alice', 'Test-Room');
   const b = await connect(port, 'Bob', 'test-room');
