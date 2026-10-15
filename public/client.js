@@ -358,6 +358,23 @@ if (params.get('error')) showJoinError(params.get('error'));
 if (isApp) for (const id of ['quit', 'quit2']) $(id).classList.remove('hidden');
 $('quit').onclick = $('quit2').onclick = () => window.cakeApp?.quit();
 
+// anti-cheat: if it's on and didn't load, block the game with an error screen
+let antiCheatBlocked = false;
+if (window.cakeApp?.antiCheatStatus) {
+  window.cakeApp.antiCheatStatus().then(ac => {
+    if (!ac.enabled || ac.ok) return;
+    antiCheatBlocked = true;
+    ws?.close();
+    $('join').classList.add('hidden');
+    $('eacmessage').textContent = ac.message;
+    $('eaccode').textContent = `Error: ${ac.code}`;
+    $('eacdetail').textContent = ac.detail;
+    $('eacerror').classList.remove('hidden');
+  });
+}
+$('eacretry').onclick = () => window.cakeApp?.relaunch();
+$('eacquit').onclick = () => window.cakeApp?.quit();
+
 function showJoinError(text) {
   $('joinerror').textContent = text;
   $('joinerror').classList.remove('hidden');
@@ -385,6 +402,7 @@ $('play').onclick = join;
 for (const id of ['name', 'room']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
 
 async function join() {
+  if (antiCheatBlocked) return;
   const name = $('name').value.trim() || 'Baker' + Math.floor(Math.random() * 1000);
   const room = $('room').value.trim() || 'lobby';
   localStorageSet('cd-name', name);

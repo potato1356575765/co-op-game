@@ -74,6 +74,7 @@ Each wave gets bigger and scales with how many players are in the room.
 - `public/client.js` renders that plane in 3D with **three.js**: shadows, a flickering candle light, animated bug legs and wings, crumb particles, and a follow camera. Your own movement is predicted on the client so it feels instant.
 - three.js is served from `node_modules`, so there are no CDN dependencies.
 - **Cheat protection:** the server owns all game state (movement speed, fire rate, damage, coins, the shop), so a modified client can only send inputs. The server also caps message size, kicks clients that flood messages, throttles chat, and clamps aim coordinates.
+- **Easy Anti-Cheat (in progress):** `anticheat.js` checks EAC when the app starts. It's off until the EOS SDK is wired up (`"eac": { "enabled": true }` in `package.json`, or `CAKE_EAC=1` to test). When it's on and EAC fails to load, the app shows an error screen and won't let you play.
 
 | Env var | Default | Description |
 | --- | --- | --- |

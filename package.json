@@ -32,7 +32,8 @@
       "server.js",
       "public/**",
       "build/icon.png",
-      "package.json"
+      "package.json",
+      "anticheat.js"
     ],
     "directories": {
       "output": "dist",
@@ -70,5 +71,8 @@
       "category": "Game",
       "artifactName": "CakeDefense.AppImage"
     }
+  },
+  "eac": {
+    "enabled": false
   }
 }

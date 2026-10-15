@@ -5,11 +5,13 @@
 const path = require('path');
 const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron');
 const { start } = require('./server');
+const { initAntiCheat } = require('./anticheat');
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
 let win = null;
 let homeUrl = null;
+let antiCheat = { enabled: false, ok: true };
 
 async function startServer() {
   try {
@@ -21,6 +23,8 @@ async function startServer() {
 }
 
 async function createWindow() {
+  antiCheat = initAntiCheat();
+  if (antiCheat.enabled && !antiCheat.ok) console.error(`Anti-cheat: ${antiCheat.code} ${antiCheat.detail}`);
   const port = await startServer();
   homeUrl = `http://localhost:${port}/`;
 
@@ -66,6 +70,8 @@ async function createWindow() {
 ipcMain.on('home', () => win?.loadURL(homeUrl));
 ipcMain.on('fullscreen', () => win?.setFullScreen(!win.isFullScreen()));
 ipcMain.on('quit', () => app.quit());
+ipcMain.handle('anti-cheat-status', () => antiCheat);
+ipcMain.on('relaunch', () => { app.relaunch(); app.exit(0); });
 
 app.on('second-instance', () => {
   if (!win) return;
