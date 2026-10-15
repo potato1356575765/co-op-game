@@ -1,12 +1,14 @@
 {
   "name": "co-op-game",
-  "version": "2.0.0",
-  "description": "Cake Defense 3D — an online co-op browser game where you protect a giant cake from hungry bugs",
-  "main": "server.js",
+  "version": "3.0.0",
+  "description": "Cake Defense 3D: an online co-op game where you protect a giant cake from hungry bugs",
+  "main": "main.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/smoke.js",
-    "build:exe": "node scripts/build-exe.js"
+    "app": "electron .",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "test": "node test/smoke.js"
   },
   "engines": {
     "node": ">=18"
@@ -17,7 +19,56 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2",
-    "postject": "^1.0.0-alpha.6"
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3"
+  },
+  "author": "Cake Defense",
+  "build": {
+    "appId": "com.cakedefense.game",
+    "productName": "Cake Defense",
+    "files": [
+      "main.js",
+      "preload.js",
+      "server.js",
+      "public/**",
+      "build/icon.png",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Cake Defense",
+      "artifactName": "CakeDefense-Setup.exe"
+    },
+    "portable": {
+      "artifactName": "CakeDefense-Portable.exe"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Game",
+      "artifactName": "CakeDefense.AppImage"
+    }
   }
 }

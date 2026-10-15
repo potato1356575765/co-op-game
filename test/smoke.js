@@ -1,9 +1,8 @@
 // Spins up the server, connects two players to the same room and checks the basics.
-process.env.PORT = 0;
 const assert = require('assert');
 const http = require('http');
 const WebSocket = require('ws');
-const { server, rooms } = require('../server');
+const { server, rooms, start } = require('../server');
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
@@ -22,13 +21,14 @@ function connect(port, name, room) {
 const get = (port, p) => new Promise(res => http.get(`http://localhost:${port}${p}`, r => { r.resume(); res(r.statusCode); }));
 
 (async () => {
-  await new Promise(r => server.listening ? r() : server.once('listening', r));
-  const port = server.address().port;
+  const port = await start(0);
 
   assert.strictEqual(await get(port, '/'), 200, 'serves index.html');
   assert.strictEqual(await get(port, '/client.js'), 200, 'serves client.js');
   assert.strictEqual(await get(port, '/vendor/three.module.js'), 200, 'serves three.js');
+  assert.strictEqual(await get(port, '/icon.png'), 200, 'serves icon');
   assert.notStrictEqual(await get(port, '/../server.js'), 200, 'blocks path traversal');
+  assert.strictEqual(await get(port, '/info'), 200, 'serves /info');
 
   const a = await connect(port, 'Alice', 'Test-Room');
   const b = await connect(port, 'Bob', 'test-room');
@@ -90,6 +90,16 @@ const get = (port, p) => new Promise(res => http.get(`http://localhost:${port}${
   room.cakeHp = 0;
   await wait(200);
   assert.strictEqual(a.states.at(-1).phase, 'gameover');
+
+  // anti-cheat: chat spam is throttled, message floods get kicked
+  const before2 = b.chats.length;
+  for (let i = 0; i < 5; i++) a.ws.send(JSON.stringify({ t: 'chat', text: 'spam ' + i }));
+  await wait(150);
+  assert.strictEqual(b.chats.length - before2, 1, 'chat cooldown lets 1 through and drops the spam');
+  const flooder = await connect(port, 'Flooder', 'flood');
+  const closed = new Promise(r => flooder.ws.on('close', code => r(code)));
+  for (let i = 0; i < 500; i++) flooder.ws.send(JSON.stringify({ t: 'input' }));
+  assert.strictEqual(await closed, 1008, 'flooder kicked');
 
   // leaving cleans up empty rooms
   c.ws.close();

@@ -11,21 +11,27 @@ npm start
 
 Open http://localhost:3000, pick a name and a **room code**, then hit **Play**. Anyone who enters the same room code joins your game, and you can also just share the URL (`?room=yourcode`).
 
-### 🪟 Windows .exe (no Node needed)
+### 🖥️ Desktop app (Windows)
 
-Grab `CakeDefense.exe` from the latest **Build exe** run in this repo's **Actions** tab (or build it yourself, see below) and double-click it. A console window opens with the server running, and your browser opens the game. Keep that window open while you play, and close it to stop.
+Cake Defense is a real desktop app with its own window and icon. Grab it from the latest **Build app** run in this repo's **Actions** tab (or build it yourself, see below):
 
-The console prints a `http://192.168.x.x:3000` link that friends on your Wi-Fi can open. The first time, Windows Firewall will ask whether to allow it on your network, so click **Allow**. The exe isn't code-signed, so SmartScreen may say "Windows protected your PC". Click **More info → Run anyway**.
+- **`CakeDefense-Setup.exe`** installs the game with a desktop + Start menu shortcut.
+- **`CakeDefense-Portable.exe`** is a single file you just double-click. Nothing gets installed.
 
-Build it yourself (from Windows, macOS or Linux, using Node 22):
+Open the app, pick a name, and hit **Play** to host a game on your PC. The menu shows the address friends on your Wi-Fi should type into **Friend's IP** in their app. **Esc** opens the pause menu, and **F11** toggles fullscreen.
+
+The first time you host, Windows Firewall asks whether to allow Cake Defense on your network, so click **Allow**. The app isn't code-signed, so SmartScreen may say "Windows protected your PC". Click **More info → Run anyway**.
+
+Build it yourself:
 
 ```bash
 npm install
-npm run build:exe            # -> dist/CakeDefense.exe
-npm run build:exe -- linux   # -> dist/CakeDefense-linux
+npm run app          # run the desktop app from source
+npm run dist:win     # -> dist/CakeDefense-Setup.exe + dist/CakeDefense-Portable.exe
+npm run dist:linux   # -> dist/CakeDefense.AppImage
 ```
 
-This uses Node's built-in [single executable applications](https://nodejs.org/api/single-executable-applications.html): it bundles the server with esbuild, embeds the client and three.js as assets, and injects them into the official Node binary.
+Building the Windows installer on Linux or macOS needs [Wine](https://www.winehq.org/). On Windows it just works.
 
 ### Playing with friends online
 
@@ -63,9 +69,11 @@ Each wave gets bigger and scales with how many players are in the room.
 
 ## How it works
 
+- `main.js` is the Electron desktop app. It starts the game server inside the app and shows the game in its own window. `preload.js` gives the page app-only buttons (leave, fullscreen, quit).
 - `server.js` is a Node server (plain `http` + `ws`). It runs an authoritative 30 tick/s simulation **per room** on a flat 2D plane and sends snapshots at 20 Hz. Rooms are created on demand and deleted when empty.
 - `public/client.js` renders that plane in 3D with **three.js**: shadows, a flickering candle light, animated bug legs and wings, crumb particles, and a follow camera. Your own movement is predicted on the client so it feels instant.
 - three.js is served from `node_modules`, so there are no CDN dependencies.
+- **Cheat protection:** the server owns all game state (movement speed, fire rate, damage, coins, the shop), so a modified client can only send inputs. The server also caps message size, kicks clients that flood messages, throttles chat, and clamps aim coordinates.
 
 | Env var | Default | Description |
 | --- | --- | --- |
@@ -77,4 +85,4 @@ Each wave gets bigger and scales with how many players are in the room.
 npm test
 ```
 
-Boots the server, connects players to rooms, and checks room isolation, movement sync, the shared shop, chat, waves spawning, shooting bugs, game over, and room cleanup.
+Boots the server, connects players to rooms, and checks room isolation, movement sync, the shared shop, chat, waves spawning, shooting bugs, game over, spam/flood protection, and room cleanup.

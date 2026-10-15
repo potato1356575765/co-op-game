@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Cake Defense 3D</title>
+  <link rel="icon" href="/icon.png">
   <style>
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1430; font-family: 'Trebuchet MS', system-ui, sans-serif; color: #fff; user-select: none; }
@@ -18,6 +19,16 @@
     #join button { width: 100%; margin-top: 12px; padding: 14px; font-size: 22px; font-weight: bold; border: none; border-radius: 14px; background: #ffd23f; color: #6b3fa0; cursor: pointer; box-shadow: 0 5px 0 #c99a00; }
     #join button:active { transform: translateY(3px); box-shadow: 0 2px 0 #c99a00; }
     #join small { display: block; margin-top: 14px; opacity: .8; line-height: 1.5; }
+    #join small:empty { display: none; }
+    #join #myaddr { opacity: 1; background: #0003; padding: 8px; border-radius: 10px; user-select: text; }
+    #joinerror { background: #ff5e5e; padding: 8px; border-radius: 10px; margin-top: 6px; font-size: 14px; }
+    button.secondary { background: #fff6 !important; color: #fff !important; box-shadow: none !important; font-size: 16px !important; padding: 10px !important; }
+
+    #pause { position: fixed; inset: 0; display: grid; place-items: center; background: #0008; z-index: 5; }
+    #pause .card { display: flex; flex-direction: column; gap: 10px; width: min(90vw, 300px); }
+    #pause h2 { text-align: center; margin: 0 0 8px; font-size: 36px; }
+    #pause button { padding: 14px; font-size: 20px; font-weight: bold; border: none; border-radius: 14px; background: #ffd23f; color: #6b3fa0; cursor: pointer; }
+    #pause button.secondary { padding: 14px !important; font-size: 18px !important; }
 
     #hud { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px; flex-wrap: wrap; pointer-events: none; }
     .pill { background: #0008; padding: 8px 14px; border-radius: 999px; font-weight: bold; font-size: 16px; }
@@ -55,8 +66,12 @@
       <p>The bugs are hungry. The cake is sacred. Protect it with your besties.</p>
       <input id="name" placeholder="Your baker name" maxlength="16">
       <input id="room" placeholder="Room code (share it!)" maxlength="24">
+      <input id="host" placeholder="Friend's IP (leave empty to host)" maxlength="64">
+      <div id="joinerror" class="hidden"></div>
       <button id="play">PLAY</button>
+      <small id="myaddr"></small>
       <small>WASD to move · mouse to aim · click to shoot sprinkles<br>Same room code = same game 🤝</small>
+      <button id="quit" class="secondary hidden">Quit</button>
     </div>
   </div>
 
@@ -72,9 +87,18 @@
   <div id="scores" class="hidden"></div>
   <div id="shop" class="hidden"></div>
   <div id="chat" class="hidden"><div id="chatlog"></div><input id="chatinput" class="hidden" maxlength="140" placeholder="Say something…"></div>
+  <div id="pause" class="hidden">
+    <div class="card">
+      <h2>⏸ Paused</h2>
+      <button id="resume">Resume</button>
+      <button id="fullscreen" class="secondary">Fullscreen (F11)</button>
+      <button id="leave" class="secondary">Leave game</button>
+      <button id="quit2" class="secondary hidden">Quit to desktop</button>
+    </div>
+  </div>
   <div id="help" class="hidden">
     <b>WASD</b> move · <b>Mouse</b> aim · <b>Click</b> shoot<br>
-    <b>1–4</b> shop (between waves) · <b>Enter</b> chat<br>
+    <b>1–4</b> shop (between waves) · <b>Enter</b> chat · <b>Esc</b> menu<br>
     Stand next to a downed friend to revive 💖
   </div>
 

@@ -1,4 +1,4 @@
-name: Build exe
+name: Build app
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -14,8 +14,10 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm test
-      - run: npm run build:exe
+      - run: npx electron-builder --win --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: CakeDefense-windows
-          path: dist/CakeDefense.exe
+          path: |
+            dist/CakeDefense-Setup.exe
+            dist/CakeDefense-Portable.exe

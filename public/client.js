@@ -7,7 +7,14 @@ const S = 0.1; // px -> world units
 const $ = id => document.getElementById(id);
 
 // ---------- renderer / scene ----------
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+} catch (err) {
+  document.body.innerHTML = `<div style="display:grid;place-items:center;height:100vh;text-align:center;padding:16px">
+    <div><h1>😵 No 3D graphics available</h1><p>Cake Defense needs WebGL. Try updating your graphics drivers.</p></div></div>`;
+  throw err;
+}
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
@@ -343,8 +350,33 @@ const enemies = new Map();
 const bullets = new Map();
 const labelsEl = $('labels');
 
-$('room').value = new URLSearchParams(location.search).get('room') || '';
-$('name').value = localStorageGet('cd-name') || '';
+const params = new URLSearchParams(location.search);
+const isApp = !!window.cakeApp;
+$('room').value = params.get('room') || '';
+$('name').value = params.get('name') || localStorageGet('cd-name') || '';
+if (params.get('error')) showJoinError(params.get('error'));
+if (isApp) for (const id of ['quit', 'quit2']) $(id).classList.remove('hidden');
+$('quit').onclick = $('quit2').onclick = () => window.cakeApp?.quit();
+
+function showJoinError(text) {
+  $('joinerror').textContent = text;
+  $('joinerror').classList.remove('hidden');
+}
+
+// tell the host which address friends should type in
+if (['localhost', '127.0.0.1'].includes(location.hostname)) {
+  fetch('/info').then(r => r.json()).then(info => {
+    if (!info.lan.length) return;
+    const port = info.port === 3000 ? '' : `:${info.port}`;
+    $('myaddr').innerHTML = `Friends on your Wi-Fi join you with:<br><b>${info.lan.map(ip => ip + port).join('</b> or <b>')}</b>`;
+  }).catch(() => {});
+}
+
+// go back to the menu (on the host's own computer when we're in the app)
+function goHome() {
+  if (window.cakeApp) window.cakeApp.home();
+  else location.href = '/';
+}
 
 function localStorageGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function localStorageSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
@@ -352,15 +384,37 @@ function localStorageSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
 $('play').onclick = join;
 for (const id of ['name', 'room']) $(id).addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
 
-function join() {
+async function join() {
   const name = $('name').value.trim() || 'Baker' + Math.floor(Math.random() * 1000);
   const room = $('room').value.trim() || 'lobby';
   localStorageSet('cd-name', name);
+  const host = $('host').value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  if (host && host !== location.host) {
+    // the friend's computer serves the game too, so we just go there
+    const addr = /:\d+$/.test(host) ? host : `${host}:3000`;
+    $('play').disabled = true;
+    $('play').textContent = 'Connecting…';
+    try {
+      const ctrl = new AbortController();
+      setTimeout(() => ctrl.abort(), 4000);
+      const info = await (await fetch(`http://${addr}/info`, { signal: ctrl.signal })).json();
+      if (info.game !== 'cake-defense') throw new Error();
+      location.href = `http://${addr}/?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}&autoplay=1`;
+    } catch {
+      showJoinError(`Couldn't find a Cake Defense game at ${addr}. Check the address and that you're on the same Wi-Fi.`);
+      $('play').disabled = false;
+      $('play').textContent = 'PLAY';
+    }
+    return;
+  }
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}`);
   ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name, room }));
   ws.onmessage = e => onMessage(JSON.parse(e.data));
-  ws.onclose = () => { $('banner').textContent = 'Disconnected 😢 — refresh to rejoin'; };
+  ws.onclose = () => {
+    $('banner').innerHTML = 'Disconnected 😢<br><small>Press Esc for the menu</small>';
+    ws = null;
+  };
   $('join').classList.add('hidden');
 }
 
@@ -504,6 +558,18 @@ function buildShop() {
   });
 }
 
+function togglePause(show = $('pause').classList.contains('hidden')) {
+  $('pause').classList.toggle('hidden', !show);
+  if (show) { for (const k in keys) keys[k] = false; input.shoot = false; }
+}
+$('resume').onclick = () => togglePause(false);
+$('leave').onclick = () => { ws?.close(); goHome(); };
+$('fullscreen').onclick = () => {
+  if (window.cakeApp) window.cakeApp.toggleFullscreen();
+  else if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen?.();
+};
+
 function buy(item) { if (ws?.readyState === 1) ws.send(JSON.stringify({ t: 'buy', item })); }
 
 // ---------- input ----------
@@ -526,6 +592,7 @@ addEventListener('keydown', e => {
     return;
   }
   if (!myId) return;
+  if (e.key === 'Escape') { togglePause(); return; }
   if (e.key === 'Enter') { chatInput.classList.remove('hidden'); chatInput.focus(); e.preventDefault(); return; }
   const n = Number(e.key);
   if (n >= 1 && n <= 4 && shopInfo) buy(Object.keys(shopInfo)[n - 1]);
@@ -705,4 +772,5 @@ function placeLabel(el, pos, h) {
   el.style.top = `${(-tmp.y * 0.5 + 0.5) * innerHeight}px`;
 }
 
+if (params.get('autoplay') && $('name').value) join();
 animate();

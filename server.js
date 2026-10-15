@@ -3,6 +3,7 @@
 
 const http = require('http');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 
@@ -342,46 +343,60 @@ function getRoom(id) {
 }
 
 // --- static files ---
-// When packaged as a single executable (.exe), files are embedded as SEA assets instead of read from disk.
-const sea = (() => {
-  try { const m = require('node:sea'); return m.isSea() ? m : null; } catch { return null; }
-})();
 const ASSETS = {
-  '/': 'index.html',
-  '/index.html': 'index.html',
-  '/client.js': 'client.js',
-  '/vendor/three.module.js': 'three.module.js',
+  '/': path.join(__dirname, 'public', 'index.html'),
+  '/index.html': path.join(__dirname, 'public', 'index.html'),
+  '/client.js': path.join(__dirname, 'public', 'client.js'),
+  '/icon.png': path.join(__dirname, 'build', 'icon.png'),
+  '/vendor/three.module.js': path.join(path.dirname(require.resolve('three')), 'three.module.js'),
 };
-const MIME = { '.html': 'text/html', '.js': 'text/javascript' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png' };
 
-function readAsset(name, cb) {
-  if (sea) {
-    try { return cb(null, Buffer.from(sea.getAsset(name))); } catch (err) { return cb(err); }
-  }
-  const file = name === 'three.module.js'
-    ? path.join(path.dirname(require.resolve('three')), 'three.module.js')
-    : path.join(__dirname, 'public', name);
-  fs.readFile(file, cb);
+function lanAddresses() {
+  return Object.values(os.networkInterfaces()).flat()
+    .filter(a => a && a.family === 'IPv4' && !a.internal).map(a => a.address);
 }
 
 const server = http.createServer((req, res) => {
-  const name = ASSETS[new URL(req.url, 'http://x').pathname];
-  if (!name) { res.writeHead(404); return res.end('Not found'); }
-  readAsset(name, (err, data) => {
-    if (err) { res.writeHead(500); return res.end('Missing asset'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(name)] });
+  const pathname = new URL(req.url, 'http://x').pathname;
+  if (pathname === '/info') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    return res.end(JSON.stringify({ game: 'cake-defense', port: server.address().port, lan: lanAddresses() }));
+  }
+  const file = ASSETS[pathname];
+  if (!file) { res.writeHead(404); return res.end('Not found'); }
+  fs.readFile(file, (err, data) => {
+    if (err) { res.writeHead(404); return res.end('Not found'); }
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] });
     res.end(data);
   });
 });
 
 // --- websockets ---
-const wss = new WebSocketServer({ server });
+// Anti-cheat: the server owns all game state (movement speed, fire rate, damage, coins, shop),
+// so clients can only send inputs. On top of that we cap message size and rate, and kick floods.
+const MAX_MSGS_PER_SEC = 60;
+const MSG_BURST = 120;
+const CHAT_COOLDOWN = 0.75;
+
+const wss = new WebSocketServer({ server, maxPayload: 4096 });
 
 wss.on('connection', ws => {
   let room = null;
   let player = null;
 
+  let tokens = MSG_BURST;
+  let lastRefill = Date.now();
+  let lastChat = 0;
+
   ws.on('message', raw => {
+    const now = Date.now();
+    tokens = Math.min(MSG_BURST, tokens + ((now - lastRefill) / 1000) * MAX_MSGS_PER_SEC);
+    lastRefill = now;
+    if (--tokens < 0) {
+      ws.close(1008, 'Too many messages');
+      return;
+    }
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
     if (!msg || typeof msg !== 'object') return;
@@ -398,11 +413,13 @@ wss.on('connection', ws => {
     if (msg.t === 'input') {
       const i = player.input;
       for (const k of ['up', 'down', 'left', 'right', 'shoot']) i[k] = !!msg[k];
-      if (Number.isFinite(msg.ax)) i.ax = msg.ax;
-      if (Number.isFinite(msg.ay)) i.ay = msg.ay;
+      if (Number.isFinite(msg.ax)) i.ax = clamp(msg.ax, -W, 2 * W);
+      if (Number.isFinite(msg.ay)) i.ay = clamp(msg.ay, -H, 2 * H);
     } else if (msg.t === 'buy') {
       room.buy(player, msg.item);
     } else if (msg.t === 'chat') {
+      if (now - lastChat < CHAT_COOLDOWN * 1000) return;
+      lastChat = now;
       const text = String(msg.text || '').trim().slice(0, 140);
       if (text) room.broadcast({ t: 'chat', name: player.name, color: player.color, text });
     }
@@ -426,37 +443,18 @@ setInterval(() => {
   }
 }, 1000 / TICK_RATE);
 
-function openBrowser(url) {
-  const { spawn } = require('child_process');
-  const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]]
-    : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
-  try { spawn(cmd, args, { stdio: 'ignore', detached: true }).on('error', () => {}).unref(); } catch {}
+function start(port = PORT) {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, () => {
+      server.off('error', reject);
+      resolve(server.address().port);
+    });
+  });
 }
 
-function lanAddresses() {
-  return Object.values(require('os').networkInterfaces()).flat()
-    .filter(a => a && a.family === 'IPv4' && !a.internal).map(a => a.address);
+if (require.main === module) {
+  start().then(port => console.log(`🍰 Cake Defense running at http://localhost:${port}`));
 }
 
-server.on('error', err => {
-  if (sea && err.code === 'EADDRINUSE') {
-    // Probably already running in another window: just open the game.
-    console.log(`Port ${PORT} is already in use — opening the game that's already running.`);
-    openBrowser(`http://localhost:${PORT}`);
-    setTimeout(() => process.exit(0), 3000);
-  } else {
-    throw err;
-  }
-});
-
-server.listen(PORT, () => {
-  const port = server.address().port;
-  console.log(`🍰 Cake Defense running at http://localhost:${port}`);
-  if (sea) {
-    for (const ip of lanAddresses()) console.log(`   Friends on your Wi-Fi can join at http://${ip}:${port}`);
-    console.log('   Keep this window open while you play. Close it to stop the server.');
-    if (!process.env.NO_BROWSER) openBrowser(`http://localhost:${port}`);
-  }
-});
-
-module.exports = { server, rooms };
+module.exports = { server, rooms, start, lanAddresses };
