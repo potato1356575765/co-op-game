@@ -1,0 +1,26 @@
+{
+  "sheet": "hooks",
+  "columns": ["id", "game", "kind", "symbol", "hash", "params", "returns", "evidence", "tested_in_game"],
+  "rows": [
+    {"id": "player_id", "game": "rdr2", "kind": "native", "symbol": "PLAYER_ID", "hash": "0x217E9DC48139933D", "params": [], "returns": "Player",
+     "evidence": "alloc8or/rdr3-nativedb-data natives.json", "tested_in_game": false},
+    {"id": "get_bounty", "game": "rdr2", "kind": "native", "symbol": "GET_BOUNTY", "hash": "0x54310AAB97B92816", "params": ["Player"], "returns": "int",
+     "evidence": "alloc8or/rdr3-nativedb-data natives.json", "tested_in_game": false},
+    {"id": "add_bounty", "game": "rdr2", "kind": "native", "symbol": "ADD_BOUNTY", "hash": "0x0E3BDEED21BEB945", "params": ["Player", "int"], "returns": "void",
+     "evidence": "alloc8or/rdr3-nativedb-data natives.json", "tested_in_game": false},
+    {"id": "in_online", "game": "rdr2", "kind": "native", "symbol": "NETWORK_IS_GAME_IN_PROGRESS", "hash": "0x10FAB35428CCC9D7", "params": [], "returns": "BOOL",
+     "evidence": "alloc8or/rdr3-nativedb-data natives.json", "tested_in_game": false},
+    {"id": "get_honor", "game": "rdr2", "kind": "script_global", "symbol": "story honor value", "hash": null, "params": [], "returns": "int",
+     "evidence": null, "tested_in_game": false},
+    {"id": "native_lookup", "game": "rdr2", "kind": "pattern_scan", "symbol": "native handler table lookup in RDR2.exe", "hash": null, "params": ["uint64"], "returns": "handler*",
+     "evidence": null, "tested_in_game": false},
+    {"id": "script_tick", "game": "rdr2", "kind": "pattern_scan", "symbol": "script thread tick (natives must run on it)", "hash": null, "params": [], "returns": "void",
+     "evidence": null, "tested_in_game": false},
+    {"id": "entity_killed", "game": "hl2", "kind": "game_event", "symbol": "entity_killed", "hash": "n/a", "params": ["entindex_killed", "entindex_attacker"], "returns": "void",
+     "evidence": "hl2/resource/gameevents.res in Source SDK 2013", "tested_in_game": false},
+    {"id": "skill_cvar", "game": "hl2", "kind": "convar", "symbol": "skill", "hash": "n/a", "params": ["int 1-3"], "returns": "void",
+     "evidence": "Source SDK 2013 game/shared (skill 1 easy, 2 normal, 3 hard)", "tested_in_game": false},
+    {"id": "plugin_load", "game": "hl2", "kind": "loader", "symbol": "addons/gthl.vdf server plugin (ISERVERPLUGINCALLBACKS003)", "hash": "n/a", "params": [], "returns": "bool",
+     "evidence": "Source SDK 2013 serverplugin_empty; 64-bit build of current hl2.exe unconfirmed", "tested_in_game": false}
+  ]
+}

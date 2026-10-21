@@ -1,0 +1,10 @@
+{
+  "sheet": "games",
+  "columns": ["id", "name", "role", "engine", "language", "mod_route", "install_dest", "process", "tested_in_game"],
+  "rows": [
+    {"id": "rdr2", "name": "Red Dead Redemption 2", "role": "primary", "engine": "RAGE", "language": "C++ (x64 ASI)",
+     "mod_route": "ultimate-asi-loader", "install_dest": "{game}/gthl.asi", "process": "RDR2.exe", "tested_in_game": false},
+    {"id": "hl2", "name": "Half-Life 2", "role": "companion", "engine": "Source (2024 anniversary branch)", "language": "C++ (Source server plugin)",
+     "mod_route": "server-plugin", "install_dest": "{game:half-life-2}/hl2/addons/gthl", "process": "hl2.exe", "tested_in_game": false}
+  ]
+}

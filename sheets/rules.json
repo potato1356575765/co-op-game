@@ -1,0 +1,12 @@
+{
+  "sheet": "rules",
+  "columns": ["id", "trigger_channel", "uses_hooks", "effect", "params", "tested_in_game"],
+  "rows": [
+    {"id": "kill_to_bounty", "trigger_channel": "hl2_kill", "uses_hooks": ["entity_killed", "player_id", "add_bounty", "in_online"],
+     "effect": "Each NPC Gordon kills in HL2 adds to Arthur's bounty in RDR2 (story mode only)",
+     "params": {"dollars_per_kill": 5, "dollars_per_combine_elite": 15, "max_dollars_per_minute": 60}, "tested_in_game": false},
+    {"id": "honor_to_skill", "trigger_channel": "rdr_heat", "uses_hooks": ["get_honor", "skill_cvar", "in_online"],
+     "effect": "Arthur's honor sets HL2 difficulty: high honor = easy, low honor = hard",
+     "params": {"easy_at_or_above": 4, "hard_at_or_below": -4}, "tested_in_game": false}
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "sheet": "channels",
+  "columns": ["id", "from", "to", "transport", "port", "format", "fields", "rate", "tested_in_game"],
+  "rows": [
+    {"id": "hl2_kill", "from": "hl2", "to": "rdr2", "transport": "udp 127.0.0.1", "port": 27961, "format": "text line",
+     "fields": "KILL <victim_classname>", "rate": "per kill", "tested_in_game": false},
+    {"id": "rdr_heat", "from": "rdr2", "to": "hl2", "transport": "udp 127.0.0.1", "port": 27962, "format": "text line",
+     "fields": "HEAT <bounty_dollars> <honor_or_-1>", "rate": "1 Hz", "tested_in_game": false}
+  ]
+}
